@@ -1,0 +1,18 @@
+// Merge selected entries into your existing binds {} block.
+// Replace /home/YOU/.local/bin with your actual path if it is not in PATH.
+// Do not add duplicate keybinds or a second shell autostart.
+binds {
+    Mod+L { spawn "macshell-lock"; }
+    Mod+Space { spawn "macshell-niri" "ipc" "call" "spotlight" "toggle"; }
+    Mod+V { spawn "macshell-niri" "ipc" "call" "spotlight" "clipboard"; }
+    Mod+Period { spawn "macshell-niri" "ipc" "call" "spotlight" "emoji"; }
+    Ctrl+Alt+W { spawn "macshell-niri" "ipc" "call" "wallpapers" "toggle"; }
+    Print { spawn "macshell-niri" "ipc" "call" "screenshot" "region"; }
+    Alt+Tab { spawn "macshell-niri" "ipc" "call" "switcher" "next"; }
+    Alt+Shift+Tab { spawn "macshell-niri" "ipc" "call" "switcher" "prev"; }
+}
+// The installer adds this using the absolute launcher path:
+// spawn-at-startup "/home/YOU/.local/bin/macshell-niri"
+// window-rule { match title="^macshell Settings$"; open-floating true; }
+// xwayland-satellite { path "xwayland-satellite"; }
+// Do not spawn Xwayland or xwayland-satellite yourself and do not hard-code DISPLAY.

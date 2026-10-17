@@ -1,0 +1,33 @@
+name: Check niri port
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Installer and config migration
+        run: python3 -m unittest discover -s tests -v
+      - name: niri event reducer
+        run: node tests/niri-state.test.cjs
+      - name: Python and shell syntax
+        run: |
+          python3 -m compileall -q scripts tests
+          bash -n install.sh
+      - name: QML parser
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-declarative-dev-tools
+          for file in *.qml; do
+            /usr/lib/qt6/bin/qmlformat "$file" > /dev/null
+          done
+      - name: Reject Hyprland runtime dependencies
+        run: |
+          if rg 'import Quickshell.Hyprland|"hyprctl"|hl\.dsp' --glob '*.qml'; then
+            exit 1
+          fi

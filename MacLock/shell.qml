@@ -11,10 +11,10 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import Quickshell.Services.Pam
 
 ShellRoot {
+    NiriBackend { id: niri }
     // never hot-reload while holding the session lock: a half-edited config must not touch a live lock
     settings.watchFiles: false
     id: root
@@ -27,6 +27,7 @@ ShellRoot {
     }
     IpcHandler {
         target: "lockscreen"
+        function secure(): bool { return lock.secure; }
         function state(): string {
             if (lock.wasSecure) return lock.secure ? "busy" : "stopping";
             return root.lockRequested ? "busy" : "ready";
@@ -37,7 +38,7 @@ ShellRoot {
     // the monitor that was focused when the lock started gets the full layout
     property string primary: ""
     function pickPrimary() {
-        if (primary === "" && Hyprland.focusedMonitor) primary = Hyprland.focusedMonitor.name;
+        if (primary === "" && niri.focusedMonitor) primary = niri.focusedMonitor.name;
     }
     Component.onCompleted: pickPrimary()
     // Hyprland's state arrives a moment after startup; only fall back to the first screen if it never does
@@ -45,7 +46,7 @@ ShellRoot {
         interval: 400; running: true
         onTriggered: if (root.primary === "" && Quickshell.screens.length > 0) root.primary = Quickshell.screens[0].name
     }
-    Connections { target: Hyprland; function onFocusedMonitorChanged() { root.pickPrimary(); } }
+    Connections { target: niri; function onChanged() { root.pickPrimary(); } }
 
     QtObject {
         id: lockState
@@ -112,7 +113,7 @@ ShellRoot {
         id: capsProc
         // Hyprland's own state, not the LEDs (a virtual keyboard such as GPU Screen Recorder's can leave the LEDs lit).
         // Caps Lock lives per keyboard in Hyprland; the one you typed on last is "main" and its state is what applies
-        command: ["sh", "-c", "hyprctl devices -j 2>/dev/null | jq -r '[.keyboards[] | select(.main) | .capsLock] | any'"]
+        command: ["sh", "-c", "echo false"]
         stdout: StdioCollector {
             onStreamFinished: lockState.capsLock = text.trim() === "true"
         }
@@ -120,8 +121,6 @@ ShellRoot {
     Timer { interval: 700; repeat: true; running: true; triggeredOnStart: true; onTriggered: lockState.checkCaps() }
 
     Timer { interval: 1000; running: true; repeat: true; triggeredOnStart: true; onTriggered: lockState.now = new Date() }
-    // preview-only test hook: MACLOCK_TEST_MORPH=1 flips 12/24-hour every 1.5 s so the clock morph can be checked
-    Timer { interval: 1500; repeat: true; running: root.preview && Quickshell.env("MACLOCK_TEST_MORPH") === "1"; onTriggered: lockState.use24h = !lockState.use24h }
     Timer { id: idleTimer; interval: 9000; onTriggered: if (lockState.pass.length === 0 && !lockState.busy) lockState.engaged = false }
     Timer { id: msgTimer; interval: 3500; onTriggered: lockState.message = "" }
     // let the exit animation play, then drop the lock and quit
@@ -142,8 +141,8 @@ ShellRoot {
 
     PamContext {
         id: pam
-        configDirectory: "/etc/pam.d"
-        config: "hyprlock"
+        configDirectory: Quickshell.env("MACSHELL_PAM_DIR") || "/etc/pam.d"
+        config: "swaylock"
         onPamMessage: {
             if (this.responseRequired) this.respond(lockState.pass);
         }
@@ -225,7 +224,7 @@ ShellRoot {
         WlSessionLockSurface {
             id: surf
             // transparent + Hyprland's session_lock_xray: the lock fades in over the desktop and fades out to it
-            color: "transparent"
+            color: "#0b0b10"
             LockScreen {
                 anchors.fill: parent
                 st: lockState

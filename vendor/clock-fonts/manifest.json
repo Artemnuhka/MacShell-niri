@@ -1,0 +1,12 @@
+{
+  "revision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+  "source": "https://github.com/google/fonts",
+  "files": {
+    "RobotoFlex/RobotoFlex.ttf": "9b523f7d82593df0107173849ebb8c817471a1df4b4fb2c3cbf40cfd810c8281",
+    "RobotoFlex/OFL.txt": "9cbaed04b20c853f99840efe5dc96956f6f6120ed83a0ade35f9281a2b63e5d0",
+    "Nunito/Nunito.ttf": "bb55a5ca5c2042335b3991af27c4d0705d0ef41cac6164ac737fd8f2a1e85207",
+    "Nunito/OFL.txt": "580df76c95a1ec5ab878ceb25bb3d85c6a076804e9c970c8c6972aea775fdf65",
+    "NotoSerifDisplay/NotoSerifDisplay.ttf": "4b661adcf6a5d38bf5befdc4d976e8a7238a4aeb57e62c1c1a67775380a09df9",
+    "NotoSerifDisplay/OFL.txt": "5e0da210fb04058a8c0087985d2d456b931c2579811a49655721d3cf0c36b6d6"
+  }
+}

@@ -345,7 +345,7 @@ Item {
                         width: (liveCard.width - 40 * ls.u) / (ls.clockSt.ringing.kind === "timer" ? 1 : 2); height: 30 * ls.u; radius: height / 2
                         color: modelData === "Stop" ? "#FF9F0A" : Qt.rgba(1, 1, 1, ringBtn.pressed ? 0.32 : 0.2)
                         Text { anchors.centerIn: parent; text: parent.modelData; color: parent.modelData === "Stop" ? "black" : "white"; font.family: ls.fam; font.pixelSize: 13 * ls.u; font.weight: Font.DemiBold }
-                        MouseArea { id: ringBtn; anchors.fill: parent; onClicked: Quickshell.execDetached(["qs", "-c", "MacShell", "ipc", "call", "clock", parent.modelData === "Stop" ? "stop" : "snooze"]) }
+                        MouseArea { id: ringBtn; anchors.fill: parent; onClicked: Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/macshell-niri", "ipc", "call", "clock", parent.modelData === "Stop" ? "stop" : "snooze"]) }
                     }
                 }
             }
@@ -380,7 +380,7 @@ Item {
                     id: flyOff
                     property real to: 0
                     NumberAnimation { target: nc; property: "dragX"; to: flyOff.to; duration: 260; easing.type: Easing.OutCubic }
-                    ScriptAction { script: { nc.gone = true; Quickshell.execDetached(["qs", "-c", "MacShell", "ipc", "call", "notifications", "dismiss", String(nc.nid)]); } }
+                    ScriptAction { script: { nc.gone = true; Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/macshell-niri", "ipc", "call", "notifications", "dismiss", String(nc.nid)]); } }
                 }
 
                 Glass { anchors.fill: parent; src: glassTex; frame: ls; cornerR: 20 * ls.u; thickness: 20; tint: 0.40; shadowAmt: 0.3 }

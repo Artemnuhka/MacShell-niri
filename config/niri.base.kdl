@@ -1,0 +1,37 @@
+// Small starting configuration for a new niri session. Existing configs are preserved.
+input {
+    keyboard {
+        xkb { }
+    }
+    touchpad { tap; natural-scroll; }
+}
+layout {
+    gaps 12
+    default-column-width { proportion 0.5; }
+    focus-ring { width 2; active-color "#0a84ff"; inactive-color "#555555"; }
+}
+hotkey-overlay { skip-at-startup; }
+prefer-no-csd
+screenshot-path "~/Pictures/Screenshots/Screenshot-%Y-%m-%d-%H-%M-%S.png"
+binds {
+    Mod+Return { spawn "kitty"; }
+    Mod+Q { close-window; }
+    Mod+Left { focus-column-left; }
+    Mod+Right { focus-column-right; }
+    Mod+Up { focus-window-up; }
+    Mod+Down { focus-window-down; }
+    Mod+Shift+Left { move-column-left; }
+    Mod+Shift+Right { move-column-right; }
+    Mod+Page_Up { focus-workspace-up; }
+    Mod+Page_Down { focus-workspace-down; }
+    Mod+F { maximize-column; }
+    Mod+Shift+F { fullscreen-window; }
+    Mod+Shift+Space { toggle-window-floating; }
+    Mod+Minus { set-column-width "-10%"; }
+    Mod+Equal { set-column-width "+10%"; }
+    Mod+Shift+E { quit; }
+    Mod+Escape { toggle-keyboard-shortcuts-inhibit; }
+    Mod+Shift+Slash { show-hotkey-overlay; }
+    Mod+O { toggle-overview; }
+    Super+Alt+L { spawn "swaylock"; }
+}

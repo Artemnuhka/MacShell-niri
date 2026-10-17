@@ -1,300 +1,208 @@
-# MacShell
+<div align="center">
 
-A macOS Tahoe–style **menu bar + Dock** for Hyprland, built on [Quickshell](https://quickshell.org), with a real-time
-"Liquid Glass" refraction shader, window previews, Spotlight, clipboard/emoji picker, notifications, Control Center,
-screenshots, screen recording, desktop widgets (weather, calendar, clock, music player), a wallpaper picker and an
-Alt+Tab switcher — all in one Quickshell process.
+# MacShell · niri
 
-The repository also ships **MacLock**, a matching Liquid Glass lock screen. It is a separate Quickshell config on
-purpose: it runs as its own process, so a shell crash can never take the lock with it.
+**Панель, Dock, виджеты и Liquid Glass в духе macOS Tahoe — на Linux.**
 
-Best Icon Pack for the shell is here : https://github.com/Scrimas/MacOS-Like
+[![niri](https://img.shields.io/badge/compositor-niri-89b4fa)](https://github.com/niri-wm/niri)
+[![openSUSE](https://img.shields.io/badge/openSUSE-Tumbleweed-73ba25)](https://get.opensuse.org/tumbleweed/)
+[![Checks](https://github.com/Artemnuhka/MacShell-niri/actions/workflows/check.yml/badge.svg)](https://github.com/Artemnuhka/MacShell-niri/actions)
 
-> **Heads up:** this targets **Hyprland 0.55+ with a Lua config** (`hyprland.lua`) and a recent **Quickshell (0.3.x)**.
-> See [Requirements](#requirements) and [Known issues](#known-issues).
+Порт [0-ss/MacShell](https://github.com/0-ss/MacShell) с интерфейсом и виджетами из [vsoultann/MacShell](https://github.com/vsoultann/MacShell).<br>
+Собственный backend niri, установщик для openSUSE и отдельный сеанс с преломлением сцены.
 
-## Files
+![MacShell на openSUSE: панель, виджеты и Control Center](docs/media/control-center.png)
 
-```
-MacShell/               (this repository)
-├── install.sh          installer / updater
-├── README.md
-├── MacShell/           the shell      ->  ~/.config/quickshell/MacShell
-└── MacLock/            the lock screen ->  ~/.config/quickshell/MacLock
-```
+[Установка](#установка) · [Галерея](#галерея) · [Клавиши](#клавиши) · [Совместимость](#совместимость) · [Авторы](#авторы-и-лицензии)
 
-The two are installed as **separate** Quickshell configs (neither lives inside the other).
+</div>
 
-**MacShell**
+## Галерея
 
-| File | Purpose |
-|---|---|
-| `shell.qml` | Entry point. Shared hub: window geometry, wallpaper lookup, capture gating. |
-| `MacBar.qml` | Menu bar, Control Center, Spotlight, notifications, switcher, screenshots, wallpaper picker. |
-| `MacDock.qml` | Dock, window previews, and the Settings window. |
-| `MacWidgets.qml` | Desktop widgets layer (hosts the widgets below). |
-| `WeatherWidget.qml`, `WeatherIcon.qml`, `CalendarWidget.qml`, `ClockWidget.qml`, `PlayerWidget.qml`, `MarqueeText.qml` | The widgets and their helpers. |
-| `liquidglass.frag` | Liquid Glass fragment shader (compiled to `.qsb` on first run). |
-| `EmojiData.js` | Emoji fallback data for Spotlight (from [gemoji](https://github.com/github/gemoji), MIT). |
-| `macshell-update` | Update tool (installed to `~/.local/bin`, see [Updating](#updating)). |
-| `apple-logo-black.svg`, `apple-logo-white.svg` | Menu bar logo. |
+Все кадры и GIF ниже сняты с этого порта в **openSUSE Tumbleweed / VirtualBox**, без макетов интерфейса. GIF уменьшены до 4 кадров/с для небольшого размера; они не показывают реальную плавность анимаций.
 
-**MacLock**
+| Control Center | Alt+Tab |
+| :---: | :---: |
+| ![Открытие и закрытие Control Center](docs/media/control-center.gif) | ![Переключение приложений](docs/media/app-switcher.gif) |
+| Живое стекло, плеер и быстрые настройки | Переключение окон через niri IPC |
 
-| File | Purpose |
-|---|---|
-| `shell.qml` | Entry point: session lock, IPC (`lockscreen`), preview mode. |
-| `LockScreen.qml` | The lock screen UI and PAM password check. |
-| `lock-via-ipc.sh` | Helper for your keybind: starts MacLock if needed, then locks. |
-| `Glass.qml`, `Glyph.qml`, `MorphGlyph.qml`, `MorphText.qml`, `ClockGlyph.qml`, `ContourGlow.qml` and the `*.frag` / `*.qsb` shaders | Visuals. |
-| `hyprland.lua` | Snippet with the keybind (copy it into your config). |
+| Настройки | Экран блокировки |
+| :---: | :---: |
+| ![Матовые настройки и выбор часов](docs/media/settings.png) | ![Визуальный предпросмотр MacLock](docs/media/lock-screen.png) |
+| Матовые поверхности, скругления, пять стилей часов | Предпросмотр внешнего вида; настоящая блокировка использует PAM |
 
-## Requirements
+<details>
+<summary>Рабочий стол и оформление</summary>
 
-### Required
+![Виджеты на рабочем столе](docs/media/desktop.png)
 
-| What | Why |
-|---|---|
-| **Hyprland ≥ 0.55, running a Lua config** (`~/.config/hypr/hyprland.lua`) | Window actions, the Alt+Tab focus, "paste after picking" and Log Out use Lua dispatches (`hyprctl dispatch 'hl.dsp…'`, `hyprctl eval`). On older versions or a `.conf` session these actions fail; the bar, Dock, glass and previews still work. Quick test: `hyprctl dispatch 'hl.dsp.no_op()'` must not error. |
-| **Quickshell ≥ 0.3.0** (0.3.2 recommended) | Needs the Hyprland module (`HyprlandToplevel`, `lastIpcObject`, Lua-config support), `ScreencopyView`, `IpcHandler`, and the UPower / Pipewire / Mpris / SystemTray / Notifications services. |
-| Quickshell built with **Wayland**, **Hyprland**, **Screencopy → Hyprland Toplevel Export**, **Pipewire**, **UPower**, **Mpris**, **System Tray** | Distro packages normally enable all of these. Check the build info that `qs` prints in its logs. |
-| **Qt 6.5+** with `qt6-declarative`, `qt6-wayland`, **`qt6-shadertools`** (provides `qsb`) | `QtQuick.Effects` (MultiEffect) needs 6.5+. `qsb` compiles `liquidglass.frag` on first run. Without it (and without a prebuilt `liquidglass.frag.qsb`) the glass falls back to "Normal Blur". |
-| `qt6-svg` (recommended) | SVG app icons. |
-| `hyprctl`, `sh`, `xdg-open` | Core. |
-| An **icon theme** (Papirus, Adwaita, …) set for Qt apps | App icons in the Dock and Spotlight come from the system theme. If icons are blank, set one with `qt6ct` or `QS_ICON_THEME`. |
-| `curl`, `tar` | Used by the installer and the updater. |
-| Font **Inter** (default) | Falls back to the system font; "Noto Sans" / "System" can be chosen in Settings. |
+![Настройки оформления](docs/media/appearance.png)
 
-### MacLock (only if you use the lock screen)
+Обои на снимках — Tahoe Beach Dusk, выбраны отдельно в тестовом сеансе. Полноразмерные обои Apple в репозиторий не включены и установщиком не загружаются.
 
-| What | Why |
-|---|---|
-| A PAM stack at `/etc/pam.d/hyprlock` (installed by the `hyprlock` package) | MacLock checks passwords with it. The installer warns if the file is missing. |
-| Quickshell with the **Pam** and **session-lock** modules | Distro packages normally include them. |
-| Hyprland `misc:allow_session_lock_restore` (recommended) | Lets a restarted MacLock take over a lock if it ever dies. |
+</details>
 
-### Optional (missing tools just disable that feature)
+## Что внутри
 
-| Feature | Tool(s) |
-|---|---|
-| Screenshots (Print key) | `grim`, `wl-clipboard` (clipboard copy), `libnotify` (`notify-send`) |
-| Clipboard history + Emoji (Spotlight) | `wl-clipboard`, `cliphist` (the shell starts the `wl-paste --watch cliphist store` watchers itself) |
-| Screen recording | `wf-recorder` |
-| Color picker | `hyprpicker` |
-| Night Shift | `hyprsunset` |
-| Brightness | `brightnessctl` |
-| Wi-Fi / VPN / Ethernet | NetworkManager (`nmcli`); fallback editor `nm-connection-editor` or `nmtui` |
-| Bluetooth | `bluez` (`bluetoothctl`) |
-| Audio device routing | `wpctl` (WirePlumber) or `pactl` |
-| Privacy indicators | PipeWire (`pw-dump`) |
-| Keep Awake | `systemd-inhibit` |
-| Lock / Sleep / Restart / Shut Down | `loginctl`, `systemctl` (UWSM sessions are stopped via `uwsm`) |
-| Trash watching / emptying | `inotify-tools` (`inotifywait`), `ktrash6`/`ktrash5`, or a file manager (`dolphin`, `nautilus`, `thunar`, `nemo`, `pcmanfm-qt`) |
-| Folder pickers in Settings | `zenity`, `kdialog` or `yad` |
-| "About This Linux" | `fastfetch` or `neofetch` |
-| Do Not Disturb (Focus) | `dunstctl`, `makoctl` or `swaync-client` (only if you keep one of those) |
-| Emoji search keywords | `emoji-test.txt` from the `unicode-emoji` package (otherwise `EmojiData.js` is used) |
-| Wallpaper detection / applying | one of: Noctalia, `awww`/`swww`, `hyprpaper`, `swaybg`, `wpaperd` — or set a path yourself (see [Wallpaper](#wallpaper)) |
-| Installer extras | `rsync` (faster file sync), `systemd` (daily automatic updates) |
-| Default apps | terminal `kitty`, file opener `xdg-open` — change `terminal`, `launcher`, `filesCmd`, `clipboardCmd` in `~/.config/macbar/settings.json` |
+- **Панель и Dock:** меню приложений, рабочие столы, трей, уведомления, MPRIS-плеер, нормальные иконки приложений и логотип текущего дистрибутива.
+- **Control Center:** Wi-Fi, Bluetooth, звук, яркость, Focus и настраиваемое расположение элементов. Анимацию появления плиток можно отключить.
+- **Liquid Glass:** в отдельном сеансе niri-glass линзы преломляют сцену под панелями, включая окна приложений. Настройки используют более плотное матовое оформление.
+- **Виджеты:** часы, календарь, погода, батареи, музыка, заметки, фотографии, напоминания, акции и таймер/будильники; размеры S/M/L и четыре материала.
+- **Настройки:** оформление, панель, Dock, виджеты, обои и MacLock. Часовые шрифты включены в комплект.
+- **Spotlight и Alt+Tab:** поиск приложений и окон, буфер обмена, эмодзи и переключатель приложений.
+- **MacLock:** отдельный locker с PAM, музыкальным плеером и вариантами часов.
+- **Tahoe Dark + Bibata Modern Classic 20 px** при новой установке. Для kitty в VirtualBox включается отдельный обход артефактов виртуального GPU.
 
-### Conflicts
+Это перенос существующей оболочки: исходные компоненты MacShell сохранены и адаптированы. Подробности версий и заимствований — в [PORT-PROVENANCE.md](PORT-PROVENANCE.md).
 
-This shell **replaces** your bar, dock and notification daemon. Stop anything that overlaps:
+## Установка
 
-- Other bars/shells (waybar, hyprpanel, ags, Noctalia, Caelestia, …) and docks (nwg-dock, …).
-- Notification daemons (`dunst`, `mako`, `swaync`): the bar owns `org.freedesktop.Notifications`.
-  `systemctl --user disable --now dunst` (or `mako` / `swaync`).
-
-## Install
-
-1. Install the requirements above. On Arch, for example:
-   ```sh
-   sudo pacman -S hyprland quickshell qt6-declarative qt6-wayland qt6-shadertools qt6-svg hyprlock \
-        grim wl-clipboard wf-recorder cliphist libnotify brightnessctl networkmanager bluez-utils inotify-tools \
-        ttf-inter noto-fonts-emoji
-   ```
-   Other distros: install the equivalents. Fedora has a Quickshell COPR; Nix has `pkgs.quickshell`.
-   You can skip this: the installer checks every requirement (tools, Qt libraries, fonts, `hyprlock`) and installs
-   the missing ones for you with pacman, dnf or apt, after asking once (`-y` skips the question). Packages that are
-   not in the main repositories, such as `quickshell`, come from the AUR (`yay` / `paru`) or the Fedora COPR.
-   Hyprland 0.55+ with a Lua config may need a newer package than your distro ships, so check `hyprctl version`.
-   Debian/Ubuntu have no `quickshell` / `hyprland` packages: build those from source.
-2. Run the installer, either from a clone:
-   ```sh
-   git clone https://github.com/0-ss/MacShell
-   cd MacShell
-   bash install.sh
-   ```
-   or in one line:
-   ```sh
-   curl -fsSL https://raw.githubusercontent.com/0-ss/MacShell/main/install.sh | bash
-   ```
-   It installs **MacShell** to `~/.config/quickshell/MacShell` and **MacLock** to `~/.config/quickshell/MacLock`,
-   and can add the autostart line to your Hyprland config. Your settings are never touched, and the previous
-   install is backed up first (last 3 kept in `~/.local/share/macshell/backups/`).
-
-   When run from a clone, the installer first checks GitHub: if the repository has a newer version (and your clone has
-   no uncommitted changes) it downloads and installs that one automatically.
-
-   Don't reach the install folders through a symlink; Quickshell ≥ 0.3 derives its state folders from the link path.
-3. Try it:
-   ```sh
-   qs -c MacShell
-   ```
-   On first run with the Liquid Glass style, `liquidglass.frag` is compiled with `qsb` and cached in
-   `~/.config/macdock/liquidglass.frag.qsb`. Watch for `[macbar-glass] state: ready` in the log.
-4. Add the Hyprland config below, then autostart it.
-
-### Installer options
-
-| Option | Effect |
-|---|---|
-| `-y`, `--yes` | Don't ask questions (answer yes). |
-| `--no-deps` | Skip the dependency check and package installation. |
-| `--no-autostart` | Don't touch the Hyprland config. |
-| `--no-lock` | Install MacShell only, without MacLock. |
-| `--check` | Only check for a newer version (exit 0 = up to date, 10 = update available). |
-| `--local` | Install the local clone as it is, don't look for a newer version on GitHub. |
-| `--auto-update` / `--no-auto-update` | Set up / remove a daily systemd user timer that installs updates by itself. |
-| `--ref REF` | Install a specific tag or commit. |
-| `--from-dir DIR` | Install from a local folder instead of downloading. |
-| `--uninstall` | Remove MacShell and MacLock (settings are kept). |
-
-Environment: `MACSHELL_REPO`, `MACSHELL_BRANCH`, `MACSHELL_DEST`, `MACLOCK_DEST`, `GITHUB_TOKEN`.
-
-## Updating
+Основная проверенная система — **openSUSE Tumbleweed**. Запускайте от своего пользователя; `sudo` установщик запросит сам для системных действий.
 
 ```sh
-macshell-update check       # is there a newer version?
-macshell-update update      # download and install it (MacShell and MacLock)
-macshell-update rollback    # go back to the previous MacShell install
-macshell-update status
+git clone https://github.com/Artemnuhka/MacShell-niri.git
+cd MacShell-niri
+./install.sh --dry-run
+./install.sh
 ```
 
-The shell also checks by itself and tells you. `bash install.sh --check` does the same check from a clone, and
-`bash install.sh --auto-update` installs a daily timer (`systemctl --user list-timers macshell-update.timer`) so updates
-install without you doing anything. MacShell reloads itself after an update; MacLock picks up the new files the next
-time it locks.
+На openSUSE обычная установка готовит зависимости, пользовательскую оболочку, тему, курсор, конфиг и отдельный пункт **MacShell Liquid Glass (имя пользователя)** в менеджере входа. После установки выйдите из текущего сеанса и выберите этот пункт. Установщик сам сеанс не запускает.
 
-## Hyprland configuration (Lua)
+**Первая установка может потребовать сборку Quickshell и niri-glass.** Она идёт с низким приоритетом, в одно задание; продолжительность зависит от CPU и сети. При повторной установке подходящие частные сборки используются повторно. Они находятся в пользовательском каталоге и не заменяют системный niri.
 
-```lua
--- autostart (remove other bars / docks / notification daemons first)
-hl.on("hyprland.start", function()
-    hl.exec_cmd("qs -c MacShell")
-end)
-
--- layer rules: blur for the glass surfaces
-hl.layer_rule({ name = "macdock",  match = { namespace = "macdock"  }, blur = true, ignore_alpha = 0.2,  no_anim = true })
-hl.layer_rule({ name = "macspot",  match = { namespace = "macspot"  }, blur = true, ignore_alpha = 0.05, no_anim = true })
-hl.layer_rule({ name = "macbarbg", match = { namespace = "macbarbg" }, blur = true, ignore_alpha = 0.05, no_anim = true })
-hl.layer_rule({ name = "macshot",  match = { namespace = "macshot"  }, no_anim = true })   -- optional: no fade on the screenshot picker
-
--- Settings window (fixed size). Hyprland usually floats it on its own; if it tiles, add a float rule for the title
--- "macshell Settings" (see /usr/share/hypr/hyprland.lua for the window_rule syntax of your version).
-
--- keybinds (the name after -c is the config folder name, case-sensitive)
-local qs = "qs -c MacShell ipc call "
-
-hl.bind("SUPER + V",          hl.dsp.exec_cmd(qs .. "spotlight clipboard"))
-hl.bind("SUPER + period",     hl.dsp.exec_cmd(qs .. "spotlight emoji"))
-hl.bind("SUPER + Space",      hl.dsp.exec_cmd(qs .. "spotlight toggle"))
-hl.bind("ALT + TAB",          hl.dsp.exec_cmd(qs .. "switcher next"))
-hl.bind("CTRL + ALT + W",     hl.dsp.exec_cmd(qs .. "wallpapers toggle"))
-hl.bind("PRINT",              hl.dsp.exec_cmd(qs .. "screenshot region"))
-
--- MacLock (lock screen)
-hl.bind("SUPER + L",          hl.dsp.exec_cmd("sh ~/.config/quickshell/MacLock/lock-via-ipc.sh"))
-```
-
-Change `SUPER + L` if that key is already used. On a classic `hyprland.conf` the same bind is
-`bind = SUPER, L, exec, sh ~/.config/quickshell/MacLock/lock-via-ipc.sh`.
-
-Also make sure **blur is enabled** in your Hyprland `decoration` settings, or the "Normal Blur" style won't blur.
-
-### IPC reference
-
-`qs -c MacShell ipc call <target> <function>`
-
-| Target | Functions |
-|---|---|
-| `spotlight` | `toggle`, `clipboard`, `emoji`, `apps` |
-| `screenshot` | `region`, `screen`, `window` |
-| `wallpapers` | `toggle`, `open`, `close` |
-| `switcher` | `next`, `prev`, `commit`, `cancel` |
-| `settings` | `open` (works even if both the bar and the Dock are disabled) |
-| `widgets` | `refresh` (re-fetch the weather), `edit true\|false` (move / resize desktop widgets) |
-| `glass` | `captures true\|false` (window previews on/off, same as Settings → Dock Behavior → *Live window capture*) |
-
-## MacLock
-
-A macOS-style lock screen using the same Liquid Glass look. Each lock runs in its own process (a Wayland session lock
-is used once), and `lock-via-ipc.sh` starts a fresh one for every lock, so the keybind above is all you need.
+Если менеджера входа нет, запускайте из **текстовой TTY**:
 
 ```sh
-sh ~/.config/quickshell/MacLock/lock-via-ipc.sh        # lock now (what the keybind runs)
-qs -c MacLock ipc call lockscreen lock                 # same, if an IPC-ready MacLock is already running
-qs -c MacLock                                          # lock immediately, one-shot (e.g. from hypridle)
-MACLOCK_PREVIEW=1 qs -c MacLock                        # preview the design as a window, no real lock
+~/.local/bin/macshell-glass-session
 ```
 
-Passwords are checked with PAM (`/etc/pam.d/hyprlock`). To lock on idle or before sleep with `hypridle`, set
-`lock_cmd = sh ~/.config/quickshell/MacLock/lock-via-ipc.sh`.
+Не запускайте ещё один compositor из терминала внутри действующего рабочего стола: получится вложенный сеанс.
 
-## Wallpaper
+<details>
+<summary>Варианты установки и обновление</summary>
 
-The Liquid Glass refracts your wallpaper, so the shell needs its file path. It looks, in order, at: the `wallpaperPath`
-override in `settings.json`, Noctalia's `settings.toml`, `awww`/`swww query`, `hyprctl hyprpaper listactive`, and
-`~/.config/hypr/hyprpaper.conf`. If yours isn't detected (swaybg, wpaperd, a custom script), either pick a wallpaper in the
-built-in picker (Ctrl+Alt+W; it remembers the path), or set `"wallpaperPath": "/path/to/image.png"` in
-`~/.config/macdock/settings.json`. The picker reads `~/Pictures/Wallpapers` by default (`wallpaperDir`).
+```sh
+./install.sh --no-glass                   # штатный niri, без оптического преломления
+./install.sh --theme keep --cursor keep  # сохранить оформление
+./install.sh --theme tahoe-light         # светлая тема
+./install.sh --no-login-session          # запуск из TTY, без пункта менеджера входа
+./install.sh --skip-deps                 # зависимости и частный compositor уже готовы
+./install.sh --no-extras                 # без необязательных утилит
+./install.sh --no-clock-fonts            # не устанавливать комплект часовых шрифтов
+./install.sh --no-config                 # не редактировать конфиг niri
+./install.sh --keep-xwayland-config      # настройка Xwayland вручную
+./install.sh --niri-config /path/config.kdl
+```
 
-## Where things are stored
+Для обновления:
 
-| Path | Content |
-|---|---|
-| `~/.config/macbar/settings.json` | Menu bar settings |
-| `~/.config/macdock/settings.json`, `pinned.json` | Dock settings and pinned apps |
-| `~/.config/macdock/liquidglass.frag.qsb` | Compiled shader cache |
-| `~/.config/macwidgets/settings.json` | Desktop widgets and their placement |
-| `~/.local/share/macshell/` | Installer state, `macshell-update`, backups |
-| `~/.cache/macbar/` | Clipboard history helper files (images, timestamps) |
-| `~/Pictures/Screenshots` | Default screenshot folder |
+```sh
+git pull --ff-only
+./install.sh
+```
 
-Clipboard history is kept on disk (cliphist's database plus `~/.cache/macbar/clip`). Turn it off with `clipHistory: false`
-in `~/.config/macbar/settings.json` if you don't want that.
+Существующие настройки оформления и стекла сохраняются. Старые настройки виджетов мигрируются только при отсутствии нового файла. После обновления Qt частный Quickshell при необходимости пересобирается командой `./install.sh --build-quickshell`.
 
-## Troubleshooting
+Для облегчённой **openSUSE в VirtualBox** есть явный режим:
 
-| Symptom | Check |
-|---|---|
-| Glass looks flat / "Normal Blur" | `qsb` missing (install `qt6-shadertools`) — the log shows `[macbar-glass] state: failed`. Or ship a prebuilt `liquidglass.frag.qsb` next to `liquidglass.frag`; it is used as a fallback. |
-| Glass shows no wallpaper | Wallpaper not detected: see [Wallpaper](#wallpaper). |
-| Blank app icons | No Qt icon theme: set one (`qt6ct`, or `QS_ICON_THEME`) and install it. |
-| No notifications | Another daemon owns the D-Bus name. Disable it and restart the shell. |
-| Window menu actions, Alt+Tab focus, paste-after-pick or Log Out do nothing | Not on a Lua-config Hyprland 0.55+: run `hyprctl dispatch 'hl.dsp.no_op()'`. |
-| No window previews / glass behind windows | Quickshell built without Hyprland Toplevel Export, or Settings → Dock Behavior → *Live window capture* is off. |
-| Log | `qs log` (see `qs --help` for selecting the config). |
+```sh
+./install.sh --prepare-vm
+```
 
-## Known issues
+Он проверяет DMI VirtualBox, делает резервные копии, меняет официальные HTTP-зеркала openSUSE на HTTPS и при необходимости заменяет `kernel-default-base` на `kernel-default` с `vmwgfx`. Может потребоваться перезагрузка гостя. На обычной установке этот режим не выполняется.
 
-**Shell crash with `wl_display#1: error 0: invalid object NNN`** when many windows open/close quickly (a game launching,
-spamming terminals) while live window capture runs. A window closes while a capture frame for it is still pending; Hyprland
-does not answer that frame, the shell then destroys it, and the compositor drops the Wayland connection. Mitigations:
+Сторонние репозитории по умолчанию не добавляются. При необходимости можно явно выбрать `--with-wayland-repo` для openSUSE X11:Wayland.
 
-- Settings → Menu Bar → turn **Real-time glass** off (far fewer captures; the biggest win).
-- Settings → Dock Behavior → turn **Live window capture** off.
-- The shell already pauses glass captures while windows open/close.
-- Auto-restart it: `sh -c 'while :; do qs -c MacShell; sleep 1; done'` as the autostart command.
+</details>
 
-Glitchy window capture,
-Can be disabled in Settings:
+### Существующая система и NVIDIA
 
-- Settings → Dock Behavior → turn **Live window capture** off.
+Обычный установщик **не выполняет `zypper dup` и не настраивает видеодрайверы**. Перед установкой пакетов проверяется XML-план `zypper --dry-run`: при удалениях, смене поставщика, изменениях ядра, KMP-модулей или NVIDIA/CUDA/nouveau/bbswitch работа останавливается. Существующие конфиги сохраняются перед изменением, кандидат конфига niri проверяется через `niri validate`.
 
-Reproduced on Hyprland 0.56.2 / Quickshell 0.3.2
+Это защита от таких изменений пакетного плана; совместимость с любой давно установленной системой не гарантирована. Физическая NVIDIA в тестировании не участвовала.
 
-## Credits
+### Xwayland без отдельного окна
 
-Emoji data from [GitHub gemoji](https://github.com/github/gemoji) (MIT).
+Используется rootless **xwayland-satellite**, которым управляет niri:
+
+```kdl
+xwayland-satellite {
+    path "xwayland-satellite"
+}
+```
+
+Niri создаёт сокет, выставляет `DISPLAY` и запускает satellite при первом X11-приложении. Установщик убирает простые старые автозапуски Xwayland и фиксированный `DISPLAY` из редактируемого конфига. Неоднозначные shell-команды и include требуют ручной миграции: исходник в таком случае не переписывается. Внешние systemd/XDG-autostart-сервисы и профили оболочки установщик не отключает.
+
+### Первые настройки
+
+Откройте Settings из Dock. В **General → Desktop Widgets → City for weather** укажите город: погода использует Open-Meteo, автоматического определения местоположения по IP нет. Выберите свои обои и расположение виджетов. При уже занятом сочетании клавиш установщик сохраняет вашу привязку и сообщает о конфликте.
+
+## Клавиши
+
+| Сочетание | Действие |
+| --- | --- |
+| `Super + Space` | Spotlight |
+| `Super + V` | Буфер обмена |
+| `Super + .` | Эмодзи |
+| `Alt + Tab` / `Alt + Shift + Tab` | Переключение приложений |
+| Отпустить `Alt` / `Escape` | Подтвердить / отменить выбор |
+| `Super + L` | MacLock |
+| `Ctrl + Alt + W` | Выбор обоев |
+
+Также доступны команды:
+
+```sh
+~/.local/bin/macshell-niri ipc call settings open
+~/.local/bin/macshell-niri ipc call controlcenter open
+~/.local/bin/macshell-niri ipc call clock open
+~/.local/bin/macshell-niri ipc call about open
+```
+
+## Совместимость
+
+Проверки выполнены в **VirtualBox, openSUSE Tumbleweed 20261014**, niri 26.04, xwayland-satellite 0.8.3 и частном Quickshell 0.3.2. Для MacLock нужен отдельный Quickshell с поддержкой PAM; установщик проверяет его отдельно.
+
+| Среда | Статус |
+| --- | --- |
+| openSUSE Tumbleweed / VirtualBox | Основная тестовая среда: установка, обновление и графический сеанс |
+| Физический ПК / NVIDIA / несколько мониторов | Не проверено на оборудовании |
+| Arch / Fedora | В установщике есть pacman/dnf; полная установка не проверена |
+| Leap / Slowroll | Требуется доступность достаточно новых niri, Qt и satellite |
+| MicroOS / Aeon / Kalpa | Автоустановка пакетов отключена; подготовьте зависимости штатным transactional-update, затем `--skip-deps` |
+
+**Известные ограничения:**
+
+- Сеанс с настоящим преломлением использует закреплённый частный niri-glass и остаётся экспериментальным. Штатный niri не даёт такой же эффект.
+- Живых миниатюр отдельных окон в Dock/Alt+Tab пока нет: используются иконки приложений.
+- Полная идентичность macOS для всех GTK/Qt/Electron/X11-приложений недостижима одной темой. niri не предоставляет обычное сворачивание окна в Dock.
+- Wi-Fi, Bluetooth, батарея, Night Shift и экранная запись требуют отдельной проверки на реальном оборудовании. Для screen sharing нужен работающий desktop portal.
+- Не запускайте одновременно оригинальный MacShell и этот порт; другие панели и демоны уведомлений тоже могут конфликтовать.
+- Стекло расходует GPU; режим и интенсивность выбираются в настройках. Результаты маленькой VM нельзя переносить на физический ПК как оценку производительности.
+
+## Удаление и откат
+
+```sh
+./install.sh --restore-theme  # вернуть сохранённые настройки GTK/kitty/niri
+./install.sh --uninstall     # убрать оболочку, её привязки и управляемый пункт входа
+```
+
+Настройки, резервные копии, зависимости и частные сборки остаются. Для полного отката миграции Xwayland восстановите нужную резервную копию конфига niri. Виджеты хранятся в `~/.config/macshell/widgets.json`, настройки часов — `~/.config/macshell/clock.json`, панели и Dock — в `~/.config/macbar` и `~/.config/macdock`.
+
+## Проверки
+
+```sh
+python3 -m unittest discover -s tests -v
+node tests/niri-state.test.cjs
+```
+
+CI проверяет миграции и установщик, редуктор niri, синтаксис Python/shell и QML-парсер. Автоматические проверки не заменяют графическую сессию. В публичное дерево не включены тестовые GUI-приложения, временные записи, логи и ключи доступа к VM.
+
+## Авторы и лицензии
+
+- [0-ss/MacShell](https://github.com/0-ss/MacShell) — исходная оболочка, MIT.
+- [vsoultann/MacShell](https://github.com/vsoultann/MacShell) — развитие интерфейса настроек, виджетов и анимаций; изменения адаптированы для niri с указанием происхождения.
+- [niri](https://github.com/niri-wm/niri) и [Niri-glass](https://github.com/zaroutt/Niri-glass) — compositor и интеграция стекла, GPL-3.0. Исходники и лицензии сохраняются рядом с частной сборкой.
+- [MacTahoe GTK](https://github.com/vinceliuice/MacTahoe-gtk-theme) — MIT; [MacTahoe icons](https://github.com/vinceliuice/MacTahoe-icon-theme) и [Bibata](https://github.com/ful1e5/Bibata_Cursor) — GPL-3.0.
+- Комплект часовых шрифтов — SIL Open Font License; лицензии и закреплённые SHA-256 в `vendor/clock-fonts`.
+
+Лицензии и закреплённые версии сторонних ресурсов находятся в `vendor/`. Корневой [LICENSE](LICENSE) относится к MIT-коду MacShell, а не заменяет лицензии сторонних частей. Исходный README: [README.upstream.md](README.upstream.md).
