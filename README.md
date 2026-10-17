@@ -2,62 +2,62 @@
 
 # MacShell · niri
 
-**Панель, Dock, виджеты и Liquid Glass в духе macOS Tahoe — на Linux.**
+**A macOS Tahoe-inspired menu bar, Dock, widgets and Liquid Glass — on Linux.**
 
 [![niri](https://img.shields.io/badge/compositor-niri-89b4fa)](https://github.com/niri-wm/niri)
 [![openSUSE](https://img.shields.io/badge/openSUSE-Tumbleweed-73ba25)](https://get.opensuse.org/tumbleweed/)
 [![Checks](https://github.com/Artemnuhka/MacShell-niri/actions/workflows/check.yml/badge.svg)](https://github.com/Artemnuhka/MacShell-niri/actions)
 
-Порт [0-ss/MacShell](https://github.com/0-ss/MacShell) с интерфейсом и виджетами из [vsoultann/MacShell](https://github.com/vsoultann/MacShell).<br>
-Собственный backend niri, установщик для openSUSE и отдельный сеанс с преломлением сцены.
+A port of [0-ss/MacShell](https://github.com/0-ss/MacShell), with UI and widgets from [vsoultann/MacShell](https://github.com/vsoultann/MacShell).<br>
+A native niri backend, an openSUSE installer and a dedicated session with scene refraction.
 
-![MacShell на openSUSE: панель, виджеты и Control Center](docs/media/control-center.png)
+![MacShell on openSUSE: menu bar, widgets and Control Center](docs/media/control-center.png)
 
-[Установка](#установка) · [Галерея](#галерея) · [Клавиши](#клавиши) · [Совместимость](#совместимость) · [Авторы](#авторы-и-лицензии)
+[Installation](#installation) · [Gallery](#gallery) · [Shortcuts](#shortcuts) · [Compatibility](#compatibility) · [Credits](#credits-and-licenses)
+
+[🇷🇺 Русская версия](README.ru.md)
 
 </div>
 
-## Галерея
-
-Все кадры и GIF ниже сняты с этого порта в **openSUSE Tumbleweed / VirtualBox**, без макетов интерфейса. GIF уменьшены до 4 кадров/с для небольшого размера; они не показывают реальную плавность анимаций.
+## Gallery
 
 | Control Center | Alt+Tab |
 | :---: | :---: |
-| ![Открытие и закрытие Control Center](docs/media/control-center.gif) | ![Переключение приложений](docs/media/app-switcher.gif) |
-| Живое стекло, плеер и быстрые настройки | Переключение окон через niri IPC |
+| ![Opening and closing Control Center](docs/media/control-center.gif) | ![Switching applications](docs/media/app-switcher.gif) |
+| Live glass, media controls and quick settings | Window switching through niri IPC |
 
-| Настройки | Экран блокировки |
+| Settings | Lock Screen |
 | :---: | :---: |
-| ![Матовые настройки и выбор часов](docs/media/settings.png) | ![Визуальный предпросмотр MacLock](docs/media/lock-screen.png) |
-| Матовые поверхности, скругления, пять стилей часов | Предпросмотр внешнего вида; настоящая блокировка использует PAM |
+| ![Frosted settings and clock styles](docs/media/settings.png) | ![MacLock visual preview](docs/media/lock-screen.png) |
+| Frosted surfaces, rounded corners and five clock styles | Visual preview; actual session locking uses PAM |
 
 <details>
-<summary>Рабочий стол и оформление</summary>
+<summary>Desktop and appearance</summary>
 
-![Виджеты на рабочем столе](docs/media/desktop.png)
+![Desktop widgets](docs/media/desktop.png)
 
-![Настройки оформления](docs/media/appearance.png)
+![Appearance settings](docs/media/appearance.png)
 
-Обои на снимках — Tahoe Beach Dusk, выбраны отдельно в тестовом сеансе. Полноразмерные обои Apple в репозиторий не включены и установщиком не загружаются.
+The screenshots use Tahoe Beach Dusk, selected separately in the test session. Full-resolution Apple wallpapers are not bundled or downloaded by the installer.
 
 </details>
 
-## Что внутри
+## Features
 
-- **Панель и Dock:** меню приложений, рабочие столы, трей, уведомления, MPRIS-плеер, нормальные иконки приложений и логотип текущего дистрибутива.
-- **Control Center:** Wi-Fi, Bluetooth, звук, яркость, Focus и настраиваемое расположение элементов. Анимацию появления плиток можно отключить.
-- **Liquid Glass:** в отдельном сеансе niri-glass линзы преломляют сцену под панелями, включая окна приложений. Настройки используют более плотное матовое оформление.
-- **Виджеты:** часы, календарь, погода, батареи, музыка, заметки, фотографии, напоминания, акции и таймер/будильники; размеры S/M/L и четыре материала.
-- **Настройки:** оформление, панель, Dock, виджеты, обои и MacLock. Часовые шрифты включены в комплект.
-- **Spotlight и Alt+Tab:** поиск приложений и окон, буфер обмена, эмодзи и переключатель приложений.
-- **MacLock:** отдельный locker с PAM, музыкальным плеером и вариантами часов.
-- **Tahoe Dark + Bibata Modern Classic 20 px** при новой установке. Для kitty в VirtualBox включается отдельный обход артефактов виртуального GPU.
+- **Menu bar and Dock:** application menus, workspaces, system tray, notifications, MPRIS media controls, application icons and a logo matching your distribution.
+- **Control Center:** Wi-Fi, Bluetooth, volume, brightness, Focus and customizable controls. Tile entrance animations can be disabled.
+- **Liquid Glass:** in the dedicated niri-glass session, lenses refract the scene beneath panels, including application windows. Settings use a denser frosted material.
+- **Widgets:** clock, calendar, weather, batteries, music, notes, photos, reminders, stocks and timer/alarms; S/M/L sizes and four materials.
+- **Settings:** appearance, menu bar, Dock, widgets, wallpapers and MacLock. Clock fonts are bundled.
+- **Spotlight and Alt+Tab:** application and window search, clipboard history, emoji and application switching.
+- **MacLock:** a separate PAM-enabled locker with media controls and customizable clocks.
+- **Tahoe Dark + Bibata Modern Classic at 20 px** on a fresh installation. A VirtualBox-specific kitty launcher works around virtual GPU artifacts.
 
-Это перенос существующей оболочки: исходные компоненты MacShell сохранены и адаптированы. Подробности версий и заимствований — в [PORT-PROVENANCE.md](PORT-PROVENANCE.md).
+This port preserves and adapts the existing MacShell components. See [PORT-PROVENANCE.md](PORT-PROVENANCE.md) for source revisions and attribution.
 
-## Установка
+## Installation
 
-Основная проверенная система — **openSUSE Tumbleweed**. Запускайте от своего пользователя; `sudo` установщик запросит сам для системных действий.
+**openSUSE Tumbleweed** is the primary tested distribution. Run the installer as your normal user; it requests `sudo` when system changes are needed.
 
 ```sh
 git clone https://github.com/Artemnuhka/MacShell-niri.git
@@ -66,64 +66,64 @@ cd MacShell-niri
 ./install.sh
 ```
 
-На openSUSE обычная установка готовит зависимости, пользовательскую оболочку, тему, курсор, конфиг и отдельный пункт **MacShell Liquid Glass (имя пользователя)** в менеджере входа. После установки выйдите из текущего сеанса и выберите этот пункт. Установщик сам сеанс не запускает.
+On openSUSE, the default installation sets up dependencies, the user shell, theme, cursor, configuration and a separate **MacShell Liquid Glass (username)** entry in your login manager. Log out and select that entry after installation. The installer does not start the session itself.
 
-**Первая установка может потребовать сборку Quickshell и niri-glass.** Она идёт с низким приоритетом, в одно задание; продолжительность зависит от CPU и сети. При повторной установке подходящие частные сборки используются повторно. Они находятся в пользовательском каталоге и не заменяют системный niri.
+**The first installation may need to build Quickshell and niri-glass.** Builds run at low priority with one job; duration depends on your CPU and connection. Subsequent installations reuse suitable private builds. These live in your user directory and do not replace the system niri binary.
 
-Если менеджера входа нет, запускайте из **текстовой TTY**:
+Without a login manager, start from a **text TTY**:
 
 ```sh
 ~/.local/bin/macshell-glass-session
 ```
 
-Не запускайте ещё один compositor из терминала внутри действующего рабочего стола: получится вложенный сеанс.
+Starting another compositor from a terminal inside your current desktop creates a nested session.
 
 <details>
-<summary>Варианты установки и обновление</summary>
+<summary>Installation options and updates</summary>
 
 ```sh
-./install.sh --no-glass                   # штатный niri, без оптического преломления
-./install.sh --theme keep --cursor keep  # сохранить оформление
-./install.sh --theme tahoe-light         # светлая тема
-./install.sh --no-login-session          # запуск из TTY, без пункта менеджера входа
-./install.sh --skip-deps                 # зависимости и частный compositor уже готовы
-./install.sh --no-extras                 # без необязательных утилит
-./install.sh --no-clock-fonts            # не устанавливать комплект часовых шрифтов
-./install.sh --no-config                 # не редактировать конфиг niri
-./install.sh --keep-xwayland-config      # настройка Xwayland вручную
+./install.sh --no-glass                   # stock niri, without optical refraction
+./install.sh --theme keep --cursor keep  # keep your current appearance
+./install.sh --theme tahoe-light         # light theme
+./install.sh --no-login-session          # TTY launcher only, no login-manager entry
+./install.sh --skip-deps                 # dependencies and private compositor are ready
+./install.sh --no-extras                 # skip optional utilities
+./install.sh --no-clock-fonts            # skip bundled clock fonts
+./install.sh --no-config                 # do not edit the niri configuration
+./install.sh --keep-xwayland-config      # configure Xwayland manually
 ./install.sh --niri-config /path/config.kdl
 ```
 
-Для обновления:
+To update:
 
 ```sh
 git pull --ff-only
 ./install.sh
 ```
 
-Существующие настройки оформления и стекла сохраняются. Старые настройки виджетов мигрируются только при отсутствии нового файла. После обновления Qt частный Quickshell при необходимости пересобирается командой `./install.sh --build-quickshell`.
+Existing appearance and glass settings are preserved. Legacy widget settings are migrated only if the new file does not exist. After a Qt update, rebuild the private Quickshell if necessary with `./install.sh --build-quickshell`.
 
-Для облегчённой **openSUSE в VirtualBox** есть явный режим:
+For a minimal **openSUSE guest in VirtualBox**, explicitly enable:
 
 ```sh
 ./install.sh --prepare-vm
 ```
 
-Он проверяет DMI VirtualBox, делает резервные копии, меняет официальные HTTP-зеркала openSUSE на HTTPS и при необходимости заменяет `kernel-default-base` на `kernel-default` с `vmwgfx`. Может потребоваться перезагрузка гостя. На обычной установке этот режим не выполняется.
+This checks VirtualBox DMI, creates backups, changes official openSUSE HTTP mirrors to HTTPS and, if necessary, replaces `kernel-default-base` with `kernel-default` containing `vmwgfx`. The guest may need a reboot. This preparation is not part of a normal installation.
 
-Сторонние репозитории по умолчанию не добавляются. При необходимости можно явно выбрать `--with-wayland-repo` для openSUSE X11:Wayland.
+Third-party repositories are not added by default. You can explicitly enable the openSUSE X11:Wayland repository with `--with-wayland-repo` if needed.
 
 </details>
 
-### Существующая система и NVIDIA
+### Existing systems and NVIDIA
 
-Обычный установщик **не выполняет `zypper dup` и не настраивает видеодрайверы**. Перед установкой пакетов проверяется XML-план `zypper --dry-run`: при удалениях, смене поставщика, изменениях ядра, KMP-модулей или NVIDIA/CUDA/nouveau/bbswitch работа останавливается. Существующие конфиги сохраняются перед изменением, кандидат конфига niri проверяется через `niri validate`.
+The normal installer **does not run `zypper dup` or configure graphics drivers**. Before installing packages, it checks the XML output of `zypper --dry-run` and stops if the plan includes removals, vendor changes, kernel or KMP changes, or changes to NVIDIA/CUDA/nouveau/bbswitch packages. Existing configurations are backed up, and the proposed niri configuration is checked with `niri validate` before replacement.
 
-Это защита от таких изменений пакетного плана; совместимость с любой давно установленной системой не гарантирована. Физическая NVIDIA в тестировании не участвовала.
+These checks guard against those package-plan changes; they do not guarantee compatibility with every existing installation. Physical NVIDIA hardware has not been tested.
 
-### Xwayland без отдельного окна
+### Xwayland without a separate window
 
-Используется rootless **xwayland-satellite**, которым управляет niri:
+The port uses rootless **xwayland-satellite**, managed by niri:
 
 ```kdl
 xwayland-satellite {
@@ -131,25 +131,25 @@ xwayland-satellite {
 }
 ```
 
-Niri создаёт сокет, выставляет `DISPLAY` и запускает satellite при первом X11-приложении. Установщик убирает простые старые автозапуски Xwayland и фиксированный `DISPLAY` из редактируемого конфига. Неоднозначные shell-команды и include требуют ручной миграции: исходник в таком случае не переписывается. Внешние systemd/XDG-autostart-сервисы и профили оболочки установщик не отключает.
+Niri creates the socket, sets `DISPLAY` and launches satellite when the first X11 application starts. The installer removes simple legacy Xwayland startup commands and fixed `DISPLAY` values from the configuration it edits. Ambiguous shell commands and includes require manual migration; in that case, the original file is left untouched. External systemd/XDG-autostart services and shell profiles are not disabled by the installer.
 
-### Первые настройки
+### First steps
 
-Откройте Settings из Dock. В **General → Desktop Widgets → City for weather** укажите город: погода использует Open-Meteo, автоматического определения местоположения по IP нет. Выберите свои обои и расположение виджетов. При уже занятом сочетании клавиш установщик сохраняет вашу привязку и сообщает о конфликте.
+Open Settings from the Dock. Enter your city in **General → Desktop Widgets → City for weather**: weather uses Open-Meteo, with no automatic IP geolocation. Choose your wallpaper and arrange your widgets. If a keyboard shortcut is already assigned, the installer keeps your binding and reports the conflict.
 
-## Клавиши
+## Shortcuts
 
-| Сочетание | Действие |
+| Shortcut | Action |
 | --- | --- |
 | `Super + Space` | Spotlight |
-| `Super + V` | Буфер обмена |
-| `Super + .` | Эмодзи |
-| `Alt + Tab` / `Alt + Shift + Tab` | Переключение приложений |
-| Отпустить `Alt` / `Escape` | Подтвердить / отменить выбор |
+| `Super + V` | Clipboard history |
+| `Super + .` | Emoji |
+| `Alt + Tab` / `Alt + Shift + Tab` | Switch applications |
+| Release `Alt` / press `Escape` | Confirm / cancel selection |
 | `Super + L` | MacLock |
-| `Ctrl + Alt + W` | Выбор обоев |
+| `Ctrl + Alt + W` | Wallpaper picker |
 
-Также доступны команды:
+You can also use IPC:
 
 ```sh
 ~/.local/bin/macshell-niri ipc call settings open
@@ -158,51 +158,51 @@ Niri создаёт сокет, выставляет `DISPLAY` и запуска
 ~/.local/bin/macshell-niri ipc call about open
 ```
 
-## Совместимость
+## Compatibility
 
-Проверки выполнены в **VirtualBox, openSUSE Tumbleweed 20261014**, niri 26.04, xwayland-satellite 0.8.3 и частном Quickshell 0.3.2. Для MacLock нужен отдельный Quickshell с поддержкой PAM; установщик проверяет его отдельно.
+Tested in **VirtualBox on openSUSE Tumbleweed 20261014**, with niri 26.04, xwayland-satellite 0.8.3 and a private Quickshell 0.3.2 build. MacLock requires a separate PAM-enabled Quickshell, which the installer checks independently.
 
-| Среда | Статус |
+| Environment | Status |
 | --- | --- |
-| openSUSE Tumbleweed / VirtualBox | Основная тестовая среда: установка, обновление и графический сеанс |
-| Физический ПК / NVIDIA / несколько мониторов | Не проверено на оборудовании |
-| Arch / Fedora | В установщике есть pacman/dnf; полная установка не проверена |
-| Leap / Slowroll | Требуется доступность достаточно новых niri, Qt и satellite |
-| MicroOS / Aeon / Kalpa | Автоустановка пакетов отключена; подготовьте зависимости штатным transactional-update, затем `--skip-deps` |
+| openSUSE Tumbleweed / VirtualBox | Primary test environment: installation, updates and graphical session |
+| Physical PC / NVIDIA / multiple monitors | Not tested on hardware |
+| Arch / Fedora | pacman/dnf support exists in the installer; a full installation has not been tested |
+| Leap / Slowroll | Requires sufficiently recent niri, Qt and satellite packages |
+| MicroOS / Aeon / Kalpa | Automatic package installation is disabled; prepare dependencies using the normal transactional-update workflow, then use `--skip-deps` |
 
-**Известные ограничения:**
+**Known limitations:**
 
-- Сеанс с настоящим преломлением использует закреплённый частный niri-glass и остаётся экспериментальным. Штатный niri не даёт такой же эффект.
-- Живых миниатюр отдельных окон в Dock/Alt+Tab пока нет: используются иконки приложений.
-- Полная идентичность macOS для всех GTK/Qt/Electron/X11-приложений недостижима одной темой. niri не предоставляет обычное сворачивание окна в Dock.
-- Wi-Fi, Bluetooth, батарея, Night Shift и экранная запись требуют отдельной проверки на реальном оборудовании. Для screen sharing нужен работающий desktop portal.
-- Не запускайте одновременно оригинальный MacShell и этот порт; другие панели и демоны уведомлений тоже могут конфликтовать.
-- Стекло расходует GPU; режим и интенсивность выбираются в настройках. Результаты маленькой VM нельзя переносить на физический ПК как оценку производительности.
+- Real refraction requires the pinned private niri-glass session and remains experimental. Stock niri does not provide the same effect.
+- Live per-window thumbnails in the Dock/Alt+Tab are not available yet; application icons are used instead.
+- A single theme cannot make every GTK/Qt/Electron/X11 application identical to macOS. niri does not provide conventional window minimization into the Dock.
+- Wi-Fi, Bluetooth, battery controls, Night Shift and screen recording need separate testing on real hardware. Screen sharing requires a working desktop portal.
+- Do not run the original MacShell and this port simultaneously; other panels and notification daemons can also conflict.
+- Glass uses GPU resources; choose its material and intensity in Settings. Performance in a small VM is not a reliable estimate for a physical PC.
 
-## Удаление и откат
+## Uninstall and rollback
 
 ```sh
-./install.sh --restore-theme  # вернуть сохранённые настройки GTK/kitty/niri
-./install.sh --uninstall     # убрать оболочку, её привязки и управляемый пункт входа
+./install.sh --restore-theme  # restore saved GTK/kitty/niri settings
+./install.sh --uninstall     # remove the shell, its bindings and managed login entry
 ```
 
-Настройки, резервные копии, зависимости и частные сборки остаются. Для полного отката миграции Xwayland восстановите нужную резервную копию конфига niri. Виджеты хранятся в `~/.config/macshell/widgets.json`, настройки часов — `~/.config/macshell/clock.json`, панели и Dock — в `~/.config/macbar` и `~/.config/macdock`.
+Settings, backups, dependencies and private builds are retained. To fully undo Xwayland migration, restore the appropriate niri configuration backup. Widgets are stored in `~/.config/macshell/widgets.json`, clock settings in `~/.config/macshell/clock.json`, and menu bar/Dock settings in `~/.config/macbar` and `~/.config/macdock`.
 
-## Проверки
+## Checks
 
 ```sh
 python3 -m unittest discover -s tests -v
 node tests/niri-state.test.cjs
 ```
 
-CI проверяет миграции и установщик, редуктор niri, синтаксис Python/shell и QML-парсер. Автоматические проверки не заменяют графическую сессию. В публичное дерево не включены тестовые GUI-приложения, временные записи, логи и ключи доступа к VM.
+CI checks the installer and migrations, niri event reducer, Python/shell syntax and QML parsing. Automated checks do not replace graphical testing. Test GUI applications, temporary recordings, logs and VM access keys are not included in the public tree.
 
-## Авторы и лицензии
+## Credits and licenses
 
-- [0-ss/MacShell](https://github.com/0-ss/MacShell) — исходная оболочка, MIT.
-- [vsoultann/MacShell](https://github.com/vsoultann/MacShell) — развитие интерфейса настроек, виджетов и анимаций; изменения адаптированы для niri с указанием происхождения.
-- [niri](https://github.com/niri-wm/niri) и [Niri-glass](https://github.com/zaroutt/Niri-glass) — compositor и интеграция стекла, GPL-3.0. Исходники и лицензии сохраняются рядом с частной сборкой.
-- [MacTahoe GTK](https://github.com/vinceliuice/MacTahoe-gtk-theme) — MIT; [MacTahoe icons](https://github.com/vinceliuice/MacTahoe-icon-theme) и [Bibata](https://github.com/ful1e5/Bibata_Cursor) — GPL-3.0.
-- Комплект часовых шрифтов — SIL Open Font License; лицензии и закреплённые SHA-256 в `vendor/clock-fonts`.
+- [0-ss/MacShell](https://github.com/0-ss/MacShell) — original shell, MIT.
+- [vsoultann/MacShell](https://github.com/vsoultann/MacShell) — settings UI, widgets and animation improvements, adapted for niri with attribution.
+- [niri](https://github.com/niri-wm/niri) and [Niri-glass](https://github.com/zaroutt/Niri-glass) — compositor and glass integration, GPL-3.0. Sources and licenses are retained alongside the private build.
+- [MacTahoe GTK](https://github.com/vinceliuice/MacTahoe-gtk-theme) — MIT; [MacTahoe icons](https://github.com/vinceliuice/MacTahoe-icon-theme) and [Bibata](https://github.com/ful1e5/Bibata_Cursor) — GPL-3.0.
+- Bundled clock fonts — SIL Open Font License; licenses and pinned SHA-256 hashes are in `vendor/clock-fonts`.
 
-Лицензии и закреплённые версии сторонних ресурсов находятся в `vendor/`. Корневой [LICENSE](LICENSE) относится к MIT-коду MacShell, а не заменяет лицензии сторонних частей. Исходный README: [README.upstream.md](README.upstream.md).
+Third-party licenses and pinned versions are in `vendor/`. The root [LICENSE](LICENSE) covers MacShell's MIT code and does not replace third-party licenses. Original documentation: [README.upstream.md](README.upstream.md).
