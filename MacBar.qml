@@ -3566,7 +3566,11 @@ Scope {
             WlrLayershell.layer: Quickshell.env("MACSHELL_REAL_GLASS") === "1" ? WlrLayer.Overlay : WlrLayer.Top
             WlrLayershell.keyboardFocus: (ui.pop === "wifi" && ui.wifiPrompt !== "") ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-            mask: Region { item: maskItem; Region { item: toastMask } }
+            mask: Region {
+                item: maskItem
+                Region { item: toastMask }
+                Region { item: osdMask }
+            }
 
             Item {
                 id: ui
@@ -4110,6 +4114,15 @@ Scope {
                     onPressed: ui.pop = ""
                 }
 
+                // The layer surface is shaped to its visible panels. Include the OSD
+                // separately so it is not clipped below the 28px menu-bar region.
+                Item {
+                    id: osdMask
+                    x: levelOsd.x; y: levelOsd.y
+                    width: levelOsd.visible ? levelOsd.width : 0
+                    height: levelOsd.visible ? levelOsd.height : 0
+                }
+
                 // Hardware-key feedback (volume / brightness): a Liquid Glass capsule at the top right, a little below the
                 // menu bar like macOS Tahoe. It refracts the live backdrop through the same shader as the popovers.
                 Item {
@@ -4145,7 +4158,7 @@ Scope {
                         x: 20; anchors.verticalCenter: parent.verticalCenter
                         width: 24; height: 24
                         kind: root.osdKind === "brightness" ? "sun" : "speaker"
-                        level: root.osdKind === "brightness" ? 3 : (root.osdValue < 0.34 ? 1 : (root.osdValue < 0.67 ? 2 : 3))
+                        level: root.osdKind === "brightness" ? 3 : (root.osdValue <= 0.001 ? 0 : (root.osdValue < 0.34 ? 1 : (root.osdValue < 0.67 ? 2 : 3)))
                         color: "white"
                     }
                     // segmented level bar: bright segments are filled, the rest are dim
