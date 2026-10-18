@@ -4423,7 +4423,7 @@ Scope {
                                     anchors.centerIn: parent
                                     text: root.keyboardLayout === "RU" ? "РУ" : root.keyboardLayout
                                     color: bpal.dark ? "#151515" : "white"
-                                    font.family: bpal.fam; font.pixelSize: 10.5; font.weight: Font.DemiBold; font.letterSpacing: -0.35
+                                    font.family: bpal.fam; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: -0.35
                                 }
                             }
                             MouseArea {
