@@ -239,6 +239,17 @@ class ConfigMigration(unittest.TestCase):
         self.assertIn('Mod+V { spawn "/tmp/my shell"', after)
         self.assertNotIn('ipc', config.managed(after))
 
+    def test_media_keys_preserve_existing_audio_handler_and_navigation(self):
+        before = 'binds {\n    XF86AudioMute { spawn "custom-mute"; }\n    Home { focus-column-first; }\n}\n'
+        after = config.merge_keybinds(before, Path('/tmp/shell'))
+        self.assertEqual(after.count('XF86AudioMute'), 1)
+        self.assertIn('spawn "custom-mute"', after)
+        self.assertIn('Home { focus-column-first; }', after)
+        self.assertIn('XF86AudioRaiseVolume allow-when-locked=true', after)
+        self.assertIn('XF86AudioLowerVolume allow-when-locked=true', after)
+        self.assertEqual([line.strip() for line in config.managed(after).splitlines() if line.strip()],
+                         [line.strip() for line in before.splitlines() if line.strip()])
+
     @unittest.skipUnless(shutil.which('niri'), 'niri validator unavailable in this environment')
     def test_starter_config_with_real_niri_parser(self):
         result = subprocess.run(['niri', 'validate', '--config', str(ROOT / 'config/niri.base.kdl')],

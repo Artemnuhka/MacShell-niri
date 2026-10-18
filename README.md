@@ -165,6 +165,8 @@ Open Settings from the Dock. Enter your city in **General â†’ Desktop Widgets â†
 
 ## Shortcuts
 
+Standard volume up/down and mute media keys are handled through `wpctl` (WirePlumber), including keyboard firmware remaps. Volume steps are 5%, capped at 100%. Existing custom bindings are preserved.
+
 | Shortcut | Action |
 | --- | --- |
 | `Super + Space` | Spotlight |
