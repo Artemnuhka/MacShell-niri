@@ -130,6 +130,26 @@ class GlassInstallation(unittest.TestCase):
                 glass.remove_login_session(installer, Path(directory) / 'data', Path(directory) / 'bin')
                 self.assertTrue(path.exists())
 
+    def test_login_entry_runs_through_sddm_wayland_word_splitting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bindir = root / 'bin'
+            bindir.mkdir()
+            launcher = bindir / 'macshell-glass-session'
+            launcher.write_text('#!/bin/sh\nprintf "session-started\\n"\n')
+            launcher.chmod(0o755)
+            with patch.object(glass, 'session_path', return_value=root / 'system.desktop'), patch.object(installer, 'run'):
+                glass.login_session(installer, root / 'data', bindir)
+            entry = (root / 'data/macshell-niri/login-session.desktop').read_text()
+            command = next(line[5:] for line in entry.splitlines() if line.startswith('Exec='))
+            # Reproduce /usr/share/sddm/scripts/wayland-session: the command is
+            # a single argument, then split with $@ before exec "$@".
+            script = root / 'sddm-wayland-session'
+            script.write_text('#!/bin/sh\nexec /bin/sh -c \'exec "$@"\' - $@\n')
+            result = subprocess.run(['/bin/sh', str(script), command], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, 'session-started\n')
+
     def test_login_removal_is_scoped_to_installation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -59,13 +59,17 @@ def login_session(installer, data, bindir, dry=False):
     if destination.exists() and f'X-MacShell-Owner={os.getuid()}\n' not in destination.read_text():
         raise RuntimeError(f'Refusing to overwrite an unmanaged session: {destination}')
     path = str(bindir / 'macshell-glass-session')
-    escaped = path.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$').replace('%', '%%')
+    # SDDM's Wayland session script word-splits Exec without interpreting
+    # quotes. Quoting an ordinary absolute path makes the quote characters
+    # part of the executable name and returns the user to the greeter.
+    if any(character.isspace() or character in '\"\\' for character in path):
+        raise RuntimeError('The SDDM session launcher path cannot contain whitespace, quotes or backslashes. Use --bin-dir ~/.local/bin, or --no-login-session for a TTY launcher.')
     staged = data / 'macshell-niri/login-session.desktop'
     staged.parent.mkdir(parents=True, exist_ok=True)
     staged.write_text('[Desktop Entry]\nType=Application\n' +
         f'Name=MacShell Liquid Glass ({pwd.getpwuid(os.getuid()).pw_name})\n' +
         'Comment=MacShell with live scene refraction on niri\n' +
-        f'Exec="{escaped}"\nDesktopNames=niri;\nX-MacShell-Owner={os.getuid()}\n')
+        f'Exec={path}\nDesktopNames=niri;\nX-MacShell-Owner={os.getuid()}\n')
     if not destination.exists() or destination.read_text() != staged.read_text():
         installer.run(['sudo', 'install', '-D', '-m', '0644', staged, destination])
     print('At the next login, select MacShell Liquid Glass. No session is started by this installer.')
