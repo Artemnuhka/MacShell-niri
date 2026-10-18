@@ -35,9 +35,6 @@
 | :---: | :---: |
 | ![Apple Color Emoji в Spotlight](docs/media/spotlight.png) | ![Пауза, смена трека и перемотка](docs/media/music.gif) |
 
-Новые материалы сняты 18 октября в openSUSE VM. В плеере — локальный тестовый звук,
-в MacLock — предпросмотр. [Проверенные функции и ограничения](docs/VALIDATION.md).
-
 <details>
 <summary>Рабочий стол и оформление</summary>
 
