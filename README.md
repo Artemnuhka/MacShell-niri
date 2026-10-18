@@ -35,9 +35,6 @@ A native niri backend, an openSUSE installer and a dedicated session with scene 
 | :---: | :---: |
 | ![Apple Color Emoji in Spotlight](docs/media/spotlight.png) | ![Pause, track change and seek](docs/media/music.gif) |
 
-Fresh captures from the openSUSE VM on October 18. Playback uses a local test tone;
-MacLock is shown in preview mode. [Validation details and limits](docs/VALIDATION.md).
-
 <details>
 <summary>Desktop and appearance</summary>
 
