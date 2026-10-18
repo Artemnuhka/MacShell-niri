@@ -4415,15 +4415,28 @@ Scope {
                                 width: parent.width - 2; height: parent.height - 6; radius: 6
                                 color: (ui.pop === "kb" || kbMouse.containsMouse) ? bpal.hover : "transparent"
                             }
-                            Rectangle {
+                            Item {
                                 anchors.centerIn: parent
-                                width: 19; height: 20; radius: 3.5
-                                color: bpal.fg
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: root.keyboardLayout === "RU" ? "РУ" : root.keyboardLayout
-                                    color: bpal.dark ? "#151515" : "white"
-                                    font.family: bpal.fam; font.pixelSize: 11; font.weight: Font.DemiBold; font.letterSpacing: -0.35
+                                width: 20; height: 20
+                                readonly property bool referenceBadge: root.keyboardLayout === "US" || root.keyboardLayout === "RU"
+                                Image {
+                                    anchors.fill: parent
+                                    visible: parent.referenceBadge
+                                    cache: false
+                                    source: root.keyboardLayout === "RU" ? Qt.resolvedUrl("assets/icons/input-source-ru.png") : Qt.resolvedUrl("assets/icons/input-source-us.png")
+                                    fillMode: Image.PreserveAspectFit
+                                    sourceSize: Qt.size(64, 64)
+                                    smooth: true; mipmap: true
+                                }
+                                Rectangle {
+                                    anchors.fill: parent; radius: 3.5
+                                    visible: !parent.referenceBadge
+                                    color: bpal.fg
+                                    Text {
+                                        anchors.centerIn: parent; text: root.keyboardLayout
+                                        color: bpal.dark ? "#151515" : "white"
+                                        font.family: bpal.fam; font.pixelSize: 11; font.weight: Font.DemiBold
+                                    }
                                 }
                             }
                             MouseArea {
