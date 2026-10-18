@@ -4417,7 +4417,7 @@ Scope {
                             }
                             Item {
                                 anchors.centerIn: parent
-                                width: 20; height: 20
+                                width: 16; height: 16
                                 readonly property bool referenceBadge: root.keyboardLayout === "US" || root.keyboardLayout === "RU"
                                 Image {
                                     anchors.fill: parent
