@@ -38,10 +38,19 @@ def os_release():
     return info
 
 
-def run(command, dry=False, **kwargs):
+def command_environment(environment=None):
+    """Stable tool output without changing the caller's desktop locale."""
+    result = dict(os.environ if environment is None else environment)
+    result.update(LC_ALL='C', LANG='C', LANGUAGE='C', PYTHONUTF8='1')
+    return result
+
+
+def run(command, dry=False, *, inherit_locale=False, **kwargs):
     print('+ ' + shlex.join(map(str, command)), flush=True)
     if dry:
         return None
+    if not inherit_locale:
+        kwargs['env'] = command_environment(kwargs.get('env'))
     return subprocess.run(list(map(str, command)), check=True, **kwargs)
 
 
@@ -60,7 +69,8 @@ def version(binary, minimum, dry=False):
             raise RuntimeError('Cannot check satellite version: install a distribution package >= 0.7')
     else:
         command = [str(binary), '--version']
-    output = subprocess.check_output(command, stderr=subprocess.STDOUT, text=True)
+    output = subprocess.check_output(command, stderr=subprocess.STDOUT, text=True,
+                                     encoding='utf-8', env=command_environment())
     match = re.search(r'(?<!\d)(\d+)\.(\d+)(?:\.(\d+))?', output)
     if not match:
         raise RuntimeError(f'Cannot determine version of {binary}: {output.strip()}')
@@ -105,7 +115,8 @@ def package_install(manager, packages, dry=False):
     if manager == 'zypper':
         if not dry:
             plan = subprocess.run(prefix + ['zypper', '--xmlout', '--non-interactive', 'install',
-                '--dry-run', '--no-recommends'] + packages, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                '--dry-run', '--no-recommends'] + packages, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding='utf-8', env=command_environment())
             if plan.returncode:
                 raise RuntimeError('Package plan could not be resolved; no packages were installed.\n' + plan.stdout)
             guard_suse_transaction(plan.stdout)
@@ -123,7 +134,7 @@ def suse_available(package, dry=False):
     if dry:
         return True
     query = subprocess.run(['zypper', '--xmlout', '--non-interactive', 'search', '--provides', '--match-exact', package],
-                           stdout=subprocess.PIPE, text=True, check=False)
+                           stdout=subprocess.PIPE, text=True, encoding='utf-8', check=False, env=command_environment())
     if query.returncode == 104:  # ZYPPER_EXIT_INF_CAP_NOT_FOUND
         return False
     if query.returncode:
@@ -449,7 +460,7 @@ def main():
         print('Dependencies checked/installed. No shell files or compositor configuration changed.')
         return
     if not args.dry_run and not (config / 'user-dirs.dirs').exists() and shutil.which('xdg-user-dirs-update'):
-        run(['xdg-user-dirs-update'])
+        run(['xdg-user-dirs-update'], inherit_locale=True)
     for tool, minimum in [('niri', '26.04'), ('xwayland-satellite', '0.7')]:
         if not version(tool, minimum, args.dry_run):
             raise RuntimeError(f'{tool} >= {minimum} required for rootless Xwayland integration')

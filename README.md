@@ -75,6 +75,8 @@ cd MacShell-niri
 ./install.sh
 ```
 
+Run the installer normally, including on Russian and other localized systems: no `LC_ALL=C` prefix is needed. Package checks and build commands use a stable locale internally; your desktop language and localized user folders are preserved.
+
 On openSUSE, the default installation adds dependencies, user-local MacShell assets and a separate **MacShell Liquid Glass (username)** login entry. It creates `~/.config/niri/macshell.kdl` from your existing niri config (or the starter template), and a separate `macshell-glass.kdl` for refraction. Your original `niri/config.kdl` stays unchanged. Log out and choose MacShell when ready; installation does not switch or stop your current session.
 
 ### Keep Plasma and your configuration

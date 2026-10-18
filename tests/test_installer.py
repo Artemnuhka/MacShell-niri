@@ -30,6 +30,45 @@ glass = load('glass_builder', 'build-glass.py')
 widgets = load('widget_migration', 'widget-migration.py')
 
 
+class InstallerLocale(unittest.TestCase):
+    def test_child_commands_use_c_without_changing_parent_or_losing_unicode(self):
+        with patch.dict(os.environ, {'LC_ALL': 'ru_RU.UTF-8', 'LANG': 'ru_RU.UTF-8',
+                                    'LANGUAGE': 'ru:en'}):
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = installer.run([sys.executable, '-c',
+                    'import os,sys; print(os.environ["LC_ALL"], os.environ["LANGUAGE"], sys.argv[1])',
+                    'Загрузки/пример'], capture_output=True, text=True, encoding='utf-8')
+            self.assertEqual(result.stdout.strip(), 'C C Загрузки/пример')
+            self.assertEqual(os.environ['LC_ALL'], 'ru_RU.UTF-8')
+            self.assertEqual(os.environ['LANGUAGE'], 'ru:en')
+
+    def test_build_environment_overrides_survive(self):
+        original = {'CARGO_BUILD_JOBS': '1', 'LC_ALL': 'ru_RU.UTF-8', 'LANGUAGE': 'ru'}
+        with patch.object(installer.subprocess, 'run') as command, contextlib.redirect_stdout(io.StringIO()):
+            installer.run(['cargo', 'build'], env=original)
+        self.assertEqual(command.call_args.kwargs['env']['LC_ALL'], 'C')
+        self.assertEqual(command.call_args.kwargs['env']['CARGO_BUILD_JOBS'], '1')
+        self.assertEqual(original['LC_ALL'], 'ru_RU.UTF-8')
+
+    def test_user_folder_creation_inherits_user_language(self):
+        with patch.dict(os.environ, {'LC_ALL': 'ru_RU.UTF-8'}), \
+             patch.object(installer.subprocess, 'run') as command, contextlib.redirect_stdout(io.StringIO()):
+            installer.run(['xdg-user-dirs-update'], inherit_locale=True)
+        self.assertNotIn('env', command.call_args.kwargs)
+
+    def test_package_queries_and_transaction_plan_use_same_locale(self):
+        reply = SimpleNamespace(returncode=0, stdout='<stream><solvable kind="package"/></stream>')
+        with patch.dict(os.environ, {'LC_ALL': 'ru_RU.UTF-8', 'LANGUAGE': 'ru'}), \
+             patch.object(installer.subprocess, 'run', return_value=reply) as command, \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertTrue(installer.suse_available('python3'))
+            installer.package_install('zypper', ['python3'])
+        self.assertEqual(command.call_count, 3)
+        for call in command.call_args_list:
+            self.assertEqual(call.kwargs['env']['LC_ALL'], 'C')
+            self.assertEqual(call.kwargs['env']['LANGUAGE'], 'C')
+
+
 class WidgetMigration(unittest.TestCase):
     def test_preserves_legacy_layout_and_maps_music_and_size(self):
         import json
