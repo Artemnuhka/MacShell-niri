@@ -56,6 +56,7 @@ The screenshots use Tahoe Beach Dusk, selected separately in the test session. F
 - **Widgets:** clock, calendar, weather, batteries, music, notes, photos, reminders, stocks and timer/alarms; S/M/L sizes and four materials.
 - **Settings:** appearance, menu bar, Dock, widgets, wallpapers and MacLock. Clock fonts are bundled.
 - **Spotlight and Alt+Tab:** application and window search, clipboard history, emoji and application switching. Right-click an application to open it or keep/remove it in the Dock without dismissing Spotlight.
+- **Default Applications:** choose the browser, mail app, file manager, terminal, text editor and PDF/image/audio/video handlers in Settings. Only changes you apply are saved; terminal shortcuts use your selected terminal.
 - **Input Sources:** add/remove XKB layouts and variants in Settings → Keyboard, choose the switching shortcut and select the active source from the menu-bar badge.
 - **Desktop portals:** GTK for appearance and file dialogs, WLR for screenshots and GNOME for screen sharing. Portal services follow the niri session lifetime; the appearance preference follows MacShell’s Light/Dark setting. Plasma portal routing is preserved.
 - **MacLock:** a separate PAM-enabled locker with media controls and customizable clocks.

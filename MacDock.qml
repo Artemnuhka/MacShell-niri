@@ -691,6 +691,7 @@ Scope {
             { id: "keyboard",   sec: 5, name: "Keyboard",        wg: "keyboard",   c1: "#A7A7AD", c2: "#7C7C82", keys: "repeat rate delay layout typing" },
             { id: "mouse",      sec: 5, name: "Mouse",           wg: "mouse",      c1: "#A7A7AD", c2: "#7C7C82", keys: "tracking speed scroll natural" },
             { id: "trackpad",   sec: 5, name: "Trackpad",        wg: "trackpad",   c1: "#A7A7AD", c2: "#7C7C82", keys: "tap click natural scroll touchpad gestures" },
+            { id: "defaultapps", sec: 6, name: "Default Applications", glyph: "apps", c1: "#3D9BFF", c2: "#0A6CFF", keys: "default browser terminal files email text pdf images audio video приложения по умолчанию браузер терминал" },
             { id: "apps",       sec: 6, name: "Applications",    glyph: "apps",     c1: "#FFB340", c2: "#FF9500", keys: "pinned apps keep remove reset dock" },
             { id: "about",      sec: 6, name: "About",           glyph: "about",    c1: "#A7A7AD", c2: "#7C7C82", keys: "version reset config folder macdock macbar macshell" }
         ]
@@ -1265,7 +1266,7 @@ Scope {
                         displays: paneDisplays, menubar: paneMenuBar, wallpaper: paneWallpaper,
                         notifications: paneNotif, sound: paneSound, focus: paneFocus,
                         lockscreen: paneLock, users: paneUsers, keyboard: paneKeyboard, mouse: paneMouse, trackpad: paneTrackpad,
-                        apps: paneApps, about: paneAbout
+                        defaultapps: paneDefaultApps, apps: paneApps, about: paneAbout
                     })[prefsWindow.panes[prefsWindow.cur].id]
                     onLoaded: fadeIn.restart()
                 }
@@ -1847,7 +1848,7 @@ Scope {
                 }
                 SLabel {
                     t: pal
-                    text: "Translucency, accent color, appearance and font are in Appearance. Commands (terminal, launcher, files, clipboard) can be edited in ~/.config/macbar/settings.json."
+                    text: "Translucency, accent color, appearance and font are in Appearance. Choose your browser, terminal and file handlers in Default Applications."
                 }
             }
         }
@@ -2262,6 +2263,11 @@ Scope {
                     }
                 }
             }
+        }
+
+        Component {
+            id: paneDefaultApps
+            DefaultApplications { theme: pal; bar: root.bar }
         }
 
         // ── Applications ──
@@ -3943,7 +3949,7 @@ Scope {
             L[item.key] = Date.now();
             launching = L;
             if (String(item.key).replace(/\.desktop$/, "") === "kitty") {
-                Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/macshell-terminal"]);
+                Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/macshell-terminal", "--app", "kitty.desktop"]);
             } else {
             // resolve the desktop entry again at click time: the one stored in the dock model can be a stale object
             // (after the app database reloads it turned into "TypeError ... execute is not a function", and Files never opened)

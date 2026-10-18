@@ -184,7 +184,7 @@ Scope {
     property bool showSearch: true
     property bool weekStartsMonday: false
     property string terminal: "kitty"
-    readonly property string effectiveTerminal: terminal.trim() === "kitty"
+    readonly property string effectiveTerminal: (terminal.trim() === "kitty" || terminal.trim() === "default")
         ? "'" + (Quickshell.env("HOME") + "/.local/bin/macshell-terminal").replace(/'/g, "'\\''") + "'" : terminal
     property string launcher: ""              // "" = built-in Spotlight; set a command (rofi, fuzzel, ...) to use an external launcher instead
     property string filesCmd: "xdg-open \"$HOME\""
@@ -228,7 +228,7 @@ Scope {
     property var barWidgets: ["appleMenu", "appMenus", "workspaces", "volume", "keyboard", "notifications", "wifi", "bluetooth", "privacy", "controlCenter", "clock"]
     function launchDesktop(entry) {
         if (String(entry.id).replace(/\.desktop$/, "").toLowerCase() === "kitty")
-            Quickshell.execDetached(["python3", Qt.resolvedUrl("scripts/launch-kitty.py").toString().replace(/^file:\/\//, "")]);
+            Quickshell.execDetached(["python3", Qt.resolvedUrl("scripts/launch-kitty.py").toString().replace(/^file:\/\//, ""), "--app", "kitty.desktop"]);
         else entry.execute();
     }
 

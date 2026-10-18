@@ -172,7 +172,7 @@ def install_dependencies(info, args, private_prefix):
         manager = 'zypper'
         if distro in ('opensuse-microos', 'aeon', 'kalpa'):
             raise RuntimeError('For transactional openSUSE install dependencies with transactional-update, reboot, then use --skip-deps')
-        required = ['distribution-logos-openSUSE-icons', 'libwayland-server0', 'niri', 'xwayland-satellite', 'xwayland', 'python3',
+        required = ['distribution-logos-openSUSE-icons', 'libwayland-server0', 'niri', 'xwayland-satellite', 'xwayland', 'python3', 'python3-gobject',
                     'xdg-desktop-portal', 'xdg-desktop-portal-gtk', 'xdg-desktop-portal-gnome', 'xdg-desktop-portal-wlr', 'qt6-declarative-imports', 'qt6-wayland', 'libQt6Svg6', 'qt6-shadertools', 'xdg-utils']
         extras = ['gvfs', 'gvfs-backends', 'udisks2', 'xdg-user-dirs', 'grim', 'wl-clipboard', 'cliphist', 'wf-recorder', 'libnotify-tools',
                   'brightnessctl', 'NetworkManager', 'bluez', 'pipewire', 'wireplumber', 'upower', 'inotify-tools',
@@ -206,14 +206,14 @@ def install_dependencies(info, args, private_prefix):
             package_install(manager, ['quickshell'], args.dry_run)
     elif distro == 'arch' or 'arch' in family:
         manager = 'pacman'
-        package_install(manager, ['niri', 'xwayland-satellite', 'xorg-xwayland', 'python', 'quickshell',
+        package_install(manager, ['niri', 'xwayland-satellite', 'xorg-xwayland', 'python', 'python-gobject', 'quickshell',
             'xdg-desktop-portal', 'xdg-desktop-portal-gtk', 'xdg-desktop-portal-gnome', 'xdg-desktop-portal-wlr', 'qt6-declarative', 'qt6-wayland', 'qt6-svg', 'qt6-shadertools', 'xdg-utils'] +
             (['gvfs', 'udisks2', 'xdg-user-dirs', 'grim', 'wl-clipboard', 'cliphist', 'wf-recorder', 'libnotify', 'brightnessctl',
               'networkmanager', 'bluez-utils', 'wireplumber', 'inotify-tools', 'wtype', 'wlsunset',
               'swaybg', 'swaylock', 'ttf-inter', 'ttf-dejavu', 'noto-fonts-emoji', 'adwaita-icon-theme', 'kitty', 'zenity', 'jq', 'imagemagick', 'ffmpeg', 'mpvpaper', 'qt6-multimedia'] if args.extras else []), args.dry_run)
     elif distro == 'fedora' or 'fedora' in family:
         manager = 'dnf'
-        package_install(manager, ['niri', 'xwayland-satellite', 'xorg-x11-server-Xwayland', 'python3',
+        package_install(manager, ['niri', 'xwayland-satellite', 'xorg-x11-server-Xwayland', 'python3', 'python3-gobject',
             'quickshell', 'xdg-desktop-portal', 'xdg-desktop-portal-gtk', 'xdg-desktop-portal-gnome', 'xdg-desktop-portal-wlr', 'qt6-qtdeclarative', 'qt6-qtwayland', 'qt6-qtsvg', 'qt6-qtshadertools', 'xdg-utils'] +
             (['grim', 'wl-clipboard', 'cliphist', 'wf-recorder', 'libnotify', 'brightnessctl',
               'NetworkManager', 'bluez', 'pipewire', 'wireplumber', 'upower', 'inotify-tools', 'wtype', 'wlsunset',
