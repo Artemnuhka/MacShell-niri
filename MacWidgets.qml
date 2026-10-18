@@ -8,6 +8,7 @@
 // Right-click a widget, Settings → General → "Edit Widgets…", or `qs -c MacShell ipc call widgets edit` opens the gallery.
 // Saved in ~/.config/macshell/widgets.json; Notes in notes.md, Reminders in reminders.md (same folder).
 import QtQuick
+import "DisplayState.js" as Displays
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
@@ -23,15 +24,21 @@ Scope {
     readonly property bool dark: bar ? bar.darkMode : true
     readonly property color accent: bar ? bar.accent : "#0a84ff"
     readonly property string fam: bar ? bar.fontFamily : "Inter Variable"
-    readonly property url shaderUrl: Qt.resolvedUrl("widgetglass.frag.qsb")
+    readonly property url shaderUrl: Qt.resolvedUrl(referenceWidgets ? "liquidglass.frag.qsb" : "widgetglass.frag.qsb")
     readonly property bool shaderOk: true
     readonly property bool gaming: bar ? bar.gaming : false
     readonly property string home: Quickshell.env("HOME")
     readonly property string cfgDir: home + "/.config/macshell"
 
+    readonly property alias referenceHost: referenceBridge
+    ReferenceWidgetHost { id: referenceBridge; source: root }
+
     // ═════════════ STATE / PERSISTENCE ═════════════
     property bool enabled: true
     property string style: "glass"
+    property bool referenceWidgets: true
+    property real widgetScale: 1.0
+    readonly property int gridStep: Math.max(1, Math.round(16 * widgetScale))
     property real glassAmt: 0.5          // Liquid Glass effect (refraction, bevel, rim): 0 = flat, 1 = strong
     property real blurAmt: 0.5           // blur of what's behind the widgets: 0 = clear, 1 = heavy
     property var widgets: []                 // [{ id, type, size: "s"|"m"|"l", x, y, screen, style? }]
@@ -44,21 +51,32 @@ Scope {
     property var stockSymbols: ["AAPL", "NVDA", "^GSPC", "BTC-USD"]
 
     readonly property var types: [
-        { type: "clock",     name: "Clock",       sizes: ["s", "m"], hint: "Analog clock · World Clock" },
+        { type: "clock",     name: "Clock",       sizes: ["s", "m", "l"], hint: "Original MacShell clock · World Clock" },
         { type: "calendar",  name: "Calendar",    sizes: ["s", "m", "l"], hint: "Today · Month" },
         { type: "weather",   name: "Weather",     sizes: ["s", "m", "l"], hint: "Now · Hourly · 5-day" },
         { type: "batteries", name: "Batteries",   sizes: ["s", "m"], hint: "Mac and connected devices" },
         { type: "music",     name: "Music",       sizes: ["s", "m", "l"], hint: "Now Playing" },
         { type: "notes",     name: "Notes",       sizes: ["s", "m", "l"], hint: "notes.md" },
+        { type: "image", name: "Image", sizes: ["s", "m", "l"], hint: "Choose your own picture" },
         { type: "photos",    name: "Photos",      sizes: ["s", "m", "l"], hint: "Featured photo" },
         { type: "reminders", name: "Reminders",   sizes: ["s", "m", "l"], hint: "reminders.md" },
         { type: "stocks",    name: "Stocks",      sizes: ["s", "m"], hint: "Watchlist" },
         { type: "alarms",    name: "Clock",       sizes: ["s", "m", "l"], hint: "Timer · Stopwatch · Alarms" }
     ]
+    function snapX(x) {
+        var pitch = dims("s").w + Math.round(25 * widgetScale);
+        return 32 + Math.round((x - 32) / pitch) * pitch;
+    }
+    function snapY(y) {
+        var pitch = dims("s").h + Math.round(7 * widgetScale);
+        return 64 + Math.round((y - 64) / pitch) * pitch;
+    }
     function dims(size) {
-        if (size === "l") return { w: 356, h: 356 };
-        if (size === "m") return { w: 356, h: 170 };
-        return { w: 170, h: 170 };
+        if (referenceWidgets) {
+            var b = size === "l" ? [375, 385] : (size === "m" ? [395, 185] : [185, 185]);
+            return { w: Math.round(b[0] * widgetScale), h: Math.round(b[1] * widgetScale) };
+        }
+        return { w: Math.round((size === "s" ? 170 : 356) * widgetScale), h: Math.round((size === "l" ? 356 : 170) * widgetScale) };
     }
 
     FileView {
@@ -68,6 +86,8 @@ Scope {
         onLoaded: {
             var o = {};
             try { o = JSON.parse(text()); } catch (e) { o = {}; }
+            if (o.referenceWidgets !== undefined) root.referenceWidgets = o.referenceWidgets;
+            if (typeof o.widgetScale === "number" && isFinite(o.widgetScale)) root.widgetScale = Math.max(0.6, Math.min(1.5, o.widgetScale));
             if (o.style) root.style = o.style;
             if (o.glassAmt !== undefined) root.glassAmt = o.glassAmt;
             if (o.blurAmt !== undefined) root.blurAmt = o.blurAmt;
@@ -77,15 +97,15 @@ Scope {
             if (typeof o.cityName === "string") root.cityName = o.cityName;
             root.widgets = o.widgets || [];
             root.loaded = true;
+            Qt.callLater(root.reflowWidgets);
         }
         onLoadFailed: {
-            // first run: a small macOS-like starter set in the top-left corner of the first screen
+            // Two small widgets above a wide player, matching the requested layout.
             root.widgets = [
-                { id: "w1", type: "weather",   size: "m", x: 32,  y: 56,  screen: "" },
-                { id: "w2", type: "calendar",  size: "s", x: 32,  y: 242, screen: "" },
-                { id: "w3", type: "batteries", size: "s", x: 218, y: 242, screen: "" },
-                { id: "w4", type: "clock",     size: "s", x: 32,  y: 428, screen: "" },
-                { id: "w5", type: "music",     size: "s", x: 218, y: 428, screen: "" }
+                { id: "w1", type: "weather", size: "m", x: 32, y: 64, screen: "" },
+                { id: "w2", type: "calendar", size: "s", x: 32, y: 256, screen: "" },
+                { id: "w3", type: "clock", size: "s", x: 242, y: 256, screen: "" },
+                { id: "w4", type: "music", size: "m", x: 32, y: 448, screen: "" }
             ];
             root.loaded = true;
             root.save();
@@ -102,7 +122,7 @@ Scope {
         for (i = wmodel.count - 1; i >= 0; i--) if (!want[wmodel.get(i).wid]) wmodel.remove(i);
         for (i = 0; i < widgets.length; i++) {
             w = widgets[i];
-            var row = { wid: w.id, wtype: w.type, wsize: w.size, wx: w.x, wy: w.y, wscreen: w.screen || "", wstyle: w.style || "" };
+            var row = { wid: w.id, wtype: w.type, wsize: w.size, wx: w.x, wy: w.y, wscreen: w.screen || "", wstyle: w.style || "", wsrc: w.src || "" };
             var at = -1;
             for (var j = 0; j < wmodel.count; j++) if (wmodel.get(j).wid === w.id) { at = j; break; }
             if (at < 0) { wmodel.append(row); continue; }
@@ -114,7 +134,21 @@ Scope {
     Timer {
         id: saveTimer
         interval: 300
-        onTriggered: store.setText(JSON.stringify({ enabled: root.enabled, style: root.style, glassAmt: root.glassAmt, blurAmt: root.blurAmt, cityName: root.cityName, stocks: root.stockSymbols, musicTintEnabled: root.musicTintEnabled, widgets: root.widgets }, null, 2))
+        onTriggered: store.setText(JSON.stringify({ referenceWidgets: root.referenceWidgets, widgetScale: root.widgetScale, enabled: root.enabled, style: root.style, glassAmt: root.glassAmt, blurAmt: root.blurAmt, cityName: root.cityName, stocks: root.stockSymbols, musicTintEnabled: root.musicTintEnabled, widgets: root.widgets }, null, 2))
+    }
+    onReferenceWidgetsChanged: if (loaded) { save(); rescaleTimer.restart(); }
+    onWidgetScaleChanged: if (loaded) { save(); rescaleTimer.restart(); }
+    Timer { id: rescaleTimer; interval: 300; onTriggered: root.reflowWidgets() }
+    // Resolve geometry without rewriting saved connector assignments or positions.
+    readonly property var placements: Displays.widgetPositions(widgets, Quickshell.screens, mainScreen, dims)
+    function placement(w) { return placements[w.id] || {screen: mainScreen, x: w.x, y: w.y}; }
+    function reflowWidgets() { /* placements follows output geometry and scale automatically */ }
+    function moveToNextScreen(w) {
+        var screens = Displays.ordered(Quickshell.screens);
+        if (screens.length < 2) return;
+        var current = screenOf(w), idx = 0;
+        for (var i = 0; i < screens.length; i++) if (screens[i].name === current) idx = i;
+        update(w.id, {screen: screens[(idx + 1) % screens.length].name});
     }
     onStyleChanged: if (loaded) save()
     onGlassAmtChanged: if (loaded) save()
@@ -133,35 +167,24 @@ Scope {
     }
     function remove(id) { widgets = widgets.filter(function (w) { return w.id !== id; }); if (selected === id) selected = ""; save(); }
     // widgets without a screen go on the main display: an external monitor if there is one (not the laptop panel)
-    readonly property string mainScreen: {
-        var sc = Quickshell.screens;
-        var pr = root.dock ? root.dock.monitorPrimary : "";
-        if (pr !== "") for (var j = 0; j < sc.length; j++) if (sc[j].name === pr) return pr;
-        for (var i = 0; i < sc.length; i++) if (!/^(eDP|LVDS|DSI)/.test(sc[i].name)) return sc[i].name;
-        return sc.length ? sc[0].name : "";
-    }
-    function screenOf(w) {
-        if (w.screen && w.screen !== "") {
-            for (var i = 0; i < Quickshell.screens.length; i++) if (Quickshell.screens[i].name === w.screen) return w.screen;
-        }
-        return mainScreen;      // no screen, or that monitor is unplugged right now
-    }
+    readonly property string mainScreen: Displays.primary(Quickshell.screens, dock ? dock.monitorPrimary : "", "")
+    function screenOf(w) { return placement(w).screen; }
     function overlaps(sname, x, y, ww, hh, skip) {
         for (var i = 0; i < widgets.length; i++) {
             var w = widgets[i];
             if (w.id === skip || screenOf(w) !== sname) continue;
-            var d = dims(w.size);
-            if (x < w.x + d.w + 2 && x + ww + 2 > w.x && y < w.y + d.h + 2 && y + hh + 2 > w.y) return true;
+            var d = dims(w.size), pos = placement(w);
+            if (x < pos.x + d.w + 2 && x + ww + 2 > pos.x && y < pos.y + d.h + 2 && y + hh + 2 > pos.y) return true;
         }
         return false;
     }
     // nearest grid position to (x, y) where a w×h widget overlaps nothing (searched in growing rings)
     function freeSpot(sname, x, y, w, h, skip, sw, sh) {
         if (!overlaps(sname, x, y, w, h, skip)) return { x: x, y: y };
-        for (var r = 16; r < 1600; r += 16) {
+        for (var r = gridStep; r < 1600; r += gridStep) {
             var best = null, bd = 1e9;
-            for (var dx = -r; dx <= r; dx += 16)
-                for (var dy = -r; dy <= r; dy += 16) {
+            for (var dx = -r; dx <= r; dx += gridStep)
+                for (var dy = -r; dy <= r; dy += gridStep) {
                     if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
                     var cx = x + dx, cy = y + dy;
                     if (cx < 8 || cy < 36 || cx + w > sw - 8 || cy + h > sh - 8) continue;
@@ -177,14 +200,56 @@ Scope {
         var d = dims(size), sw = 1920, sh = 1080;
         for (var s = 0; s < Quickshell.screens.length; s++) if (Quickshell.screens[s].name === sname) { sw = Quickshell.screens[s].width; sh = Quickshell.screens[s].height; }
         var px = 32, py = 56, found = false;
-        for (var y = 56; y + d.h < sh - 120 && !found; y += 16)
-            for (var x = 32; x + d.w < sw - 32; x += 16)
+        for (var y = 56; y + d.h < sh - 120 && !found; y += gridStep)
+            for (var x = 32; x + d.w < sw - 32; x += gridStep)
                 if (!overlaps(sname, x, y, d.w, d.h, "")) { px = x; py = y; found = true; break; }
         var id = "w" + Date.now();
         widgets = widgets.concat([{ id: id, type: type, size: size, x: px, y: py, screen: sname }]);
         selected = id;
         save();
         if (bar) bar.playSound("pop", 0.6);
+        return id;
+    }
+
+    // ───────────── image widgets ─────────────
+    // pickImage("", size) adds a new Image widget with the chosen picture; pickImage(id) changes the picture of widget id.
+    // The chosen file is copied into ~/.config/macwidgets/images so the widget keeps working if the original moves.
+    property string pickTargetId: ""
+    property string pickTargetSize: "small"
+    property string pickError: ""
+    function pickImage(id, size) {
+        if (imgPick.running) return;
+        pickTargetId = id || "";
+        pickTargetSize = size || "small";
+        pickError = "";
+        imgPick.running = true;
+    }
+    Process {
+        id: imgPick
+        command: ["sh", "-c",
+            "f=''; "
+            + "if command -v zenity >/dev/null 2>&1; then f=$(zenity --file-selection --title='Choose a picture' --file-filter='Images | *.png *.jpg *.jpeg *.webp *.gif *.bmp *.svg' 2>/dev/null); "
+            + "elif command -v kdialog >/dev/null 2>&1; then f=$(kdialog --getopenfilename \"$HOME/Pictures\" 'image/png image/jpeg image/webp image/gif image/bmp image/svg+xml' 2>/dev/null); "
+            + "elif command -v yad >/dev/null 2>&1; then f=$(yad --file --title='Choose a picture' 2>/dev/null); "
+            + "else echo 'ERR:no file chooser (install zenity, kdialog or yad)'; exit 0; fi; "
+            + "[ -n \"$f\" ] && [ -f \"$f\" ] || exit 0; "
+            + "d=\"$1/images\"; mkdir -p \"$d\" || { echo 'ERR:cannot create the images folder'; exit 0; }; "
+            + "n=\"$(date +%s)-$(printf '%s' \"$(basename \"$f\")\" | tr -c 'A-Za-z0-9._-' '_')\"; "
+            + "cp -f \"$f\" \"$d/$n\" && echo \"OK:$d/$n\" || echo 'ERR:could not copy the picture'",
+            "sh", root.cfgDir]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var t = text.trim();
+                if (t.indexOf("OK:") === 0) {
+                    var p = t.substring(3);
+                    if (root.pickTargetId === "") { var id = root.add("image", root.pickTargetSize, root.mainScreen); root.update(id, { src: p }); }
+                    else root.update(root.pickTargetId, { src: p });
+                } else if (t.indexOf("ERR:") === 0) {
+                    root.pickError = t.substring(4);
+                    console.log("[macwidgets] image:", root.pickError);
+                }
+            }
+        }
     }
 
     // ═════════════ LIVE WALLPAPER UNDER THE GLASS ═════════════
@@ -1697,7 +1762,7 @@ Scope {
                 Region {
                     required property var modelData
                     readonly property var d: root.dims(modelData.size)
-                    x: modelData.x; y: modelData.y; width: d.w; height: d.h
+                    x: root.placement(modelData).x; y: root.placement(modelData).y; width: d.w; height: d.h
                 }
             }
             mask: Region { item: root.editing ? win.contentItem : null; regions: root.editing ? [] : maskRegs.instances }
@@ -1800,10 +1865,11 @@ Scope {
                     required property string wsize
                     required property string wscreen
                     required property string wstyle
+                    required property string wsrc
                     required property real wx
                     required property real wy
                     // same shape the rest of the code (and the content components) read
-                    readonly property var modelData: ({ id: wid, type: wtype, size: wsize, x: wx, y: wy, screen: wscreen, style: wstyle })
+                    readonly property var modelData: ({ id: wid, type: wtype, size: wsize, x: wx, y: wy, screen: wscreen, style: wstyle, src: wsrc })
                     // each screen's layer shows only its own widgets (hidden delegates cost nothing); culled while
                     // a window is fullscreen on this screen — nobody can see them, so nothing is drawn (clock ticks, music…)
                     visible: root.screenOf(modelData) === win.sname && (root.editing || !win.covered)
@@ -1836,12 +1902,13 @@ Scope {
                         NumberAnimation { target: wd; property: "cf"; to: 1; duration: 520; easing.type: Easing.OutQuint }
                     }
                     readonly property string st: modelData.style || root.style
+                    readonly property bool original: (wtype === "image" || (root.referenceWidgets && ["weather", "calendar", "clock", "music"].indexOf(wtype) >= 0)) && (st === "glass" || st === "opaque" || wtype === "image")
                     readonly property bool sel: root.editing && root.selected === modelData.id
                     property real dx: 0
                     property real dy: 0
                     readonly property bool held: wDrag.active || rsDrag.active
                     // follows the pointer 1:1 while dragged; glides to the snapped spot when let go
-                    x: wx + dx; y: wy + dy
+                    x: root.placement(modelData).x + dx; y: root.placement(modelData).y + dy
                     Behavior on x { enabled: !wDrag.active; NumberAnimation { duration: 420; easing.type: Easing.OutQuint } }
                     Behavior on y { enabled: !wDrag.active; NumberAnimation { duration: 420; easing.type: Easing.OutQuint } }
                     width: d.w; height: d.h
@@ -1887,14 +1954,14 @@ Scope {
 
                     // ── the card ──
                     RectangularShadow {
-                        visible: st === "opaque"
-                        anchors.fill: parent; radius: 22; blur: 24; offset.y: 6
+                        visible: !wd.original && st === "opaque"
+                        anchors.fill: parent; radius: root.referenceWidgets ? 30 * root.widgetScale : 22; blur: 24; offset.y: 6
                         color: Qt.rgba(0, 0, 0, 0.35)
                     }
                     ShaderEffect {
                         id: glassFx
                         readonly property real pad: 12
-                        visible: st !== "opaque" && root.shaderOk && root.shaderUrl != ""
+                        visible: !wd.original && st !== "opaque" && root.shaderOk && root.shaderUrl != ""
                         x: -pad; y: -pad
                         width: wd.width + 2 * pad; height: wd.height + 2 * pad
                         fragmentShader: root.shaderUrl
@@ -1903,25 +1970,28 @@ Scope {
                         property vector2d glassSize: Qt.vector2d(wd.width, wd.height)
                         property vector2d srcSize: Qt.vector2d(win.width, win.height)
                         property vector2d srcOffset: Qt.vector2d(wd.x - pad, wd.y - pad)
-                        property real radius: 22
+                        property real radius: root.referenceWidgets ? 30 * root.widgetScale : 22
                         // glass: a wide rounded bevel that visibly bends the wallpaper at the edges, bright rim, light fringe
                         readonly property real g: root.glassAmt * 2          // 1 = the default look
-                        property real bezel: st === "glass" ? Math.min(wd.height * 0.22, 24) : Math.min(wd.height * 0.36, 26)
-                        property real thickness: st === "glass" ? 28 * g : 0
+                        property real bezel: Math.min(wd.height * 0.36, 26)
+                        property real thickness: st === "glass" ? 30 * g : 0
                         property real dispersion: st === "glass" ? 0.05 * g : 0
-                        property real magnify: 0
-                        property real rim: st === "glass" ? 0.35 + 0.65 * g : 0.28
+                        property real magnify: st === "glass" ? 0.08 * g * Math.min(1, 90 / wd.height) : 0
+                        property real rim: root.referenceWidgets ? referenceBridge.glassRim : (st === "glass" ? 0.35 + 0.65 * g : 0.28)
                         property real grain: 0.003
                         property real blurPx: st === "glass" ? 1.0 + Math.max(0, root.blurAmt - 0.5) * 8 : 7
-                        property real tintMix: st === "glass" ? 0.05 : 0
-                        property real saturation: 1.3
+                        property real tintMix: root.referenceWidgets ? referenceBridge.glassOpacity * 0.55 : (st === "glass" ? 0.05 : 0)
+                        property real saturation: 1.25
                         property real dark: root.dark ? 1 : 0
                         property real debug: 0
                         property real shadowAmt: 0.55
+                        property real rimTint: 1
+                        property real ringW: 1
                     }
                     Rectangle {
+                        visible: !wd.original
                         anchors.fill: parent
-                        radius: 22
+                        radius: root.referenceWidgets ? 30 * root.widgetScale : 22
                         color: st === "opaque" ? (root.dark ? "#1C1C1E" : "#F2F2F7")
                              : st === "tinted" ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.42)
                              : st === "frosted" ? (root.dark ? Qt.rgba(0.10, 0.10, 0.12, 0.40) : Qt.rgba(1, 1, 1, 0.42))
@@ -1941,7 +2011,7 @@ Scope {
                     Item {
                         id: tintCard
                         anchors.fill: parent
-                        opacity: wd.wtype === "music" && root.musicTintOn ? 1 : 0
+                        opacity: !wd.original && wd.wtype === "music" && root.musicTintOn ? 1 : 0
                         visible: opacity > 0.01
                         Behavior on opacity { NumberAnimation { duration: 650; easing.type: Easing.OutQuint } }
                         // the album colour as a solid card
@@ -1953,7 +2023,7 @@ Scope {
                             anchors.fill: parent
                             fragmentShader: Qt.resolvedUrl("tintcard.frag.qsb")
                             property vector2d itemSize: Qt.vector2d(width, height)
-                            property real radius: 22
+                            property real radius: root.referenceWidgets ? 30 * root.widgetScale : 22
                             property vector2d center: Qt.vector2d(tintCard.cx, tintCard.cy)
                             // reaches the farthest corner (plus the soft edge) when the spread is done
                             property real spreadR: root.musicSpread * (Math.sqrt(width * width + height * height) + 2 * soft)
@@ -1962,12 +2032,14 @@ Scope {
                             property color colNew: root.musicTint
                             property real alpha: tintCard.alpha
                         }
-                        Rectangle { anchors.fill: parent; radius: 22; color: "transparent"; border.width: 1; border.color: root.musicEdge }
+                        Rectangle { anchors.fill: parent; radius: root.referenceWidgets ? 30 * root.widgetScale : 22; color: "transparent"; border.width: 1; border.color: root.musicEdge }
                     }
 
                     // ── content ──
                     Loader {
                         id: content
+                        active: !wd.original
+                        visible: !wd.original
                         anchors.fill: parent
                         anchors.margins: modelData.type === "photos" ? 0 : 16
                         clip: true                  // nothing sticks out of the widget, even mid-resize
@@ -1979,6 +2051,35 @@ Scope {
                         sourceComponent: root.compFor(wd.wtype, wd.shownSize)
                     }
 
+                    Loader {
+                        anchors.fill: parent
+                        active: wd.original
+                        sourceComponent: Component {
+                            WidgetVisual {
+                                host: referenceBridge
+                                wtype: wd.wtype === "music" ? "player" : wd.wtype
+                                wstyle: wd.st === "glass" ? "liquid" : ((wd.wtype === "clock" || wd.wtype === "music") ? (root.dark ? "dark" : "light") : "normal")
+                                wsize: ({s: "small", m: "medium", l: "large"})[wd.wsize]
+                                wsrc: wd.wsrc
+                                sx: wd.x; sy: wd.y; sname: win.sname; sw: win.width; sh: win.height
+                            }
+                        }
+                    }
+                    Rectangle {
+                        visible: root.editing && wd.wtype === "image"
+                        anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 10
+                        width: 130; height: 26; radius: 13; color: "#F2F2F5"
+                        Text { anchors.centerIn: parent; text: "Choose Image…"; color: "#3A3A3C"; font.pixelSize: 12 }
+                        MouseArea { anchors.fill: parent; onClicked: root.pickImage(wd.wid, wd.wsize) }
+                    }
+                    Rectangle {
+                        visible: root.editing && Quickshell.screens.length > 1
+                        anchors.top: parent.top; anchors.topMargin: 8; anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.min(parent.width - 32, 150); height: 26; radius: 9; z: 40
+                        color: "#DDE5EB"
+                        Text { anchors.centerIn: parent; text: "Next display →"; color: "#1d1d1f"; font.pixelSize: 12 }
+                        MouseArea { anchors.fill: parent; onClicked: root.moveToNextScreen(wd.modelData) }
+                    }
                     // drag anywhere (snaps to 16 px); right-click → edit
                     DragHandler {
                         id: wDrag
@@ -1987,12 +2088,12 @@ Scope {
                         onTranslationChanged: { wd.dx = translation.x; wd.dy = translation.y; }
                         onActiveChanged: {
                             if (active) { root.selected = wd.modelData.id; return; }
-                            var nx = Math.round((wd.wx + wd.dx) / 16) * 16, ny = Math.round((wd.wy + wd.dy) / 16) * 16;
+                            var nx = root.snapX(root.placement(wd.modelData).x + wd.dx), ny = root.snapY(root.placement(wd.modelData).y + wd.dy);
                             nx = Math.max(8, Math.min(win.width - wd.width - 8, nx));
                             ny = Math.max(36, Math.min(win.height - wd.height - 8, ny));
                             // never on top of another widget: slide to the nearest free spot
                             var fp = root.freeSpot(win.sname, nx, ny, wd.width, wd.height, wd.wid, win.width, win.height);
-                            root.update(wd.wid, { x: fp.x, y: fp.y });
+                            root.update(wd.wid, { x: fp.x, y: fp.y, screen: win.sname });
                             wd.dx = 0; wd.dy = 0;
                         }
                     }

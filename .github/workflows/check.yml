@@ -14,7 +14,9 @@ jobs:
       - name: Installer and config migration
         run: python3 -m unittest discover -s tests -v
       - name: niri event reducer
-        run: node tests/niri-state.test.cjs
+        run: |
+          node tests/niri-state.test.cjs
+          node tests/display-state.test.cjs
       - name: Python and shell syntax
         run: |
           python3 -m compileall -q scripts tests
@@ -23,7 +25,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y qt6-declarative-dev-tools
-          for file in *.qml; do
+          for file in *.qml MacLock/*.qml; do
             /usr/lib/qt6/bin/qmlformat "$file" > /dev/null
           done
       - name: Reject Hyprland runtime dependencies

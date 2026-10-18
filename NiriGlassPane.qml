@@ -6,9 +6,10 @@ import Quickshell.Wayland
 // One input-transparent surface per slab gives the compositor the correct lens geometry.
 Scope {
     id: root
+    property bool active: false
     required property Item target
     property real radius: 20
-    readonly property bool enabled: Quickshell.env("MACSHELL_REAL_GLASS") === "1"
+    readonly property bool enabled: active && Quickshell.env("MACSHELL_REAL_GLASS") === "1"
     readonly property var owner: target ? target.QsWindow.window : null
     property bool geometryReady: false
     property real paneOpacity: 0

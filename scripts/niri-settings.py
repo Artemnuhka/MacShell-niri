@@ -44,7 +44,7 @@ def input_settings(values):
     blocks={'keyboard':[('repeat-rate',f'repeat-rate {max(1,min(100,int(v["repeatRate"])))}'),('repeat-delay',f'repeat-delay {max(100,min(2000,int(v["repeatDelay"])))}')],
             'mouse':[('accel-speed',f'accel-speed {max(-1,min(1,float(v["mouseSens"])))}'),boolean('natural-scroll',v['mouseNatural'])],
             'touchpad':[boolean('natural-scroll',v['tpNatural']),boolean('tap',v['tpTap']),boolean('dwt',v['tpDwt']),('scroll-factor',f'scroll-factor {max(.1,min(10,float(v["tpScroll"])))}')]}
-    path=Path(os.environ.get('MACSHELL_GLASS_CONFIG',str(Path.home()/'.config/niri/config.kdl')))
+    path=Path(os.environ.get('MACSHELL_GLASS_CONFIG') or os.environ.get('MACSHELL_NIRI_CONFIG') or str(Path.home()/'.config/niri/config.kdl'))
     with path.with_suffix('.optics.lock').open('w') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
         before=path.read_text();after=edit_block(before,'input',blocks)
@@ -66,7 +66,7 @@ def monitors():
         l=o.get('logical');modes=o.get('modes',[]);idx=o.get('current_mode')
         if not l or idx is None:continue
         m=modes[idx]
-        result.append(dict(name=name,description=' '.join(filter(None,[o.get('make'),o.get('model')])),width=m['width'],height=m['height'],refreshRate=m['refresh_rate']/1000,scale=l['scale'],x=l['x'],y=l['y'],availableModes=[f'{m["width"]}x{m["height"]}@{m["refresh_rate"]/1000:.3f}Hz' for m in modes]))
+        result.append(dict(name=name,description=' '.join(filter(None,[o.get('make'),o.get('model')])),width=m['width'],height=m['height'],refreshRate=m['refresh_rate']/1000,scale=l['scale'],x=l['x'],y=l['y'],logicalWidth=l['width'],logicalHeight=l['height'],availableModes=[f'{m["width"]}x{m["height"]}@{m["refresh_rate"]/1000:.3f}Hz' for m in modes]))
     print(json.dumps(result))
 
 if __name__=='__main__':

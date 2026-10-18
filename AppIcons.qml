@@ -22,6 +22,11 @@ QtObject {
         var id = String(appId || "").toLowerCase().replace(/\.desktop$/, "");
         var key = String(name || "").toLowerCase().replace(/\.desktop$/, "");
         var asset = aliases[id] || aliases[key];
+        if (String(Quickshell.env("QS_ICON_THEME")).indexOf("MacOS-Like-") === 0) {
+            var themedNames = { kitty: "utilities-terminal", terminal: "utilities-terminal", files: "system-file-manager", settings: "preferences-system", clock: "preferences-system-time", "text-editor": "text-editor", trash: "user-trash", "trash-full": "user-trash-full" };
+            var themed = Quickshell.iconPath(themedNames[asset] || name, true);
+            if (themed !== "") return themed;
+        }
         if (asset) return Qt.resolvedUrl("assets/icons/" + asset + ".svg");
         if (!name || /^(application-x-executable|application-default-icon|applications-other|org.quickshell)$/.test(key)) return fallback;
         if (String(name).indexOf("file:") === 0 || String(name).indexOf("image:") === 0) return name;

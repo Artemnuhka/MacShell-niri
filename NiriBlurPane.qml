@@ -6,7 +6,8 @@ import Quickshell.Wayland
 // The compositor renders the scene underneath, so this cannot capture itself.
 Scope {
     id: root
-    NiriGlassPane { target: root.target; radius: root.radius }
+    property bool enabled: false
+    NiriGlassPane { active: root.enabled; target: root.target; radius: root.radius }
     required property Item target
     property real radius: 20
     readonly property var owner: target ? target.QsWindow.window : null
@@ -22,18 +23,19 @@ Scope {
     }
     function attach() {
         detach();
-        if (owner && owner.glassRegions !== undefined) {
+        if (enabled && owner && owner.glassRegions !== undefined) {
             registered = owner;
             owner.glassRegions = owner.glassRegions.concat([region]);
         }
     }
     function refresh() { region.changed(); }
+    onEnabledChanged: Qt.callLater(attach)
     onOwnerChanged: Qt.callLater(attach)
     Component.onCompleted: attach()
     Component.onDestruction: detach()
     // Region geometry can otherwise lag behind scaled/animated ancestors (Qt/Quickshell).
     FrameAnimation {
-        running: Quickshell.env("MACSHELL_REAL_GLASS") !== "1" && root.target && root.target.visible && root.target.opacity > 0.001 && root.owner && root.owner.visible
+        running: root.enabled && Quickshell.env("MACSHELL_REAL_GLASS") !== "1" && root.target && root.target.visible && root.target.opacity > 0.001 && root.owner && root.owner.visible
         onTriggered: root.refresh()
     }
     Connections {

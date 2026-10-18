@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "NiriState.js" as State
+import "DisplayState.js" as Displays
 
 Scope {
     id: root
@@ -26,20 +27,15 @@ Scope {
         return null;
     }
     readonly property var focusedMonitor: {
-        var name = focusedWorkspace ? focusedWorkspace.output : lastFocusedOutput;
-        return name ? {name:name} : null;
+        var name = focusedWorkspace && focusedWorkspace.output ? focusedWorkspace.output : lastFocusedOutput;
+        if (name && (!Object.keys(outputs).length || (outputs[name] && outputs[name].logical))) return {name: name};
+        var fallback = Displays.primary(Quickshell.screens, "", "");
+        return fallback ? {name: fallback} : null;
     }
-    readonly property var monitors: {
-        var out = [], ws = workspaces;
-        Object.keys(outputs).forEach(function(name) {
-            var o = outputs[name], l = o.logical;
-            if (!l) return;
-            var active = ws.filter(function(w) { return w.output === name && w.is_active; })[0];
-            out.push({id:name, name:name, x:l.x, y:l.y, width:l.width*l.scale, height:l.height*l.scale,
-                scale:l.scale, transform:0, activeWorkspace:active || null});
-        });
-        return out;
-    }
+    readonly property var monitors: Displays.monitors(outputs, workspaces)
+    function refreshOutputs() { if (!outputQuery.running) outputQuery.running = true; }
+    Connections { target: Quickshell; function onScreensChanged() { outputsSoon.restart(); } }
+    Timer { id: outputsSoon; interval: 100; onTriggered: root.refreshOutputs() }
     function monitorFor(screen) {
         for (var i = 0; i < monitors.length; i++) if (monitors[i].name === screen.name) return monitors[i];
         return null;
@@ -120,6 +116,7 @@ Scope {
                     var e = JSON.parse(line);
                     root.connected = true;
                     root.state = State.apply(root.state, e);
+                    if (e.WorkspacesChanged) outputsSoon.restart();
                     root.synchronize();
                 } catch (err) { console.warn("[macshell-niri] Invalid IPC event:", err); }
             }
@@ -144,5 +141,5 @@ Scope {
         }
     }
     // Output geometry is not part of the event stream. Window/workspace state never polls.
-    Timer { interval: 5000; repeat: true; running: true; triggeredOnStart: true; onTriggered: if (!outputQuery.running) outputQuery.running = true }
+    Timer { interval: 2000; repeat: true; running: true; triggeredOnStart: true; onTriggered: root.refreshOutputs() }
 }

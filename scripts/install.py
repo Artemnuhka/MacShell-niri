@@ -3,6 +3,8 @@
 import argparse
 import datetime
 import importlib.util
+import hashlib
+import json
 import os
 import re
 import shlex
@@ -18,6 +20,13 @@ sys.dont_write_bytecode = True
 
 SOURCE = Path(__file__).resolve().parent.parent
 QS_TAG = 'v0.3.2'
+
+
+def load_icons():
+    spec = importlib.util.spec_from_file_location('macshell_icons', SOURCE / 'scripts/icons.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def os_release():
@@ -59,6 +68,17 @@ def version(binary, minimum, dry=False):
     wanted = tuple(int(x) for x in minimum.split('.'))
     wanted += (0,) * (3 - len(wanted))
     return current >= wanted
+
+
+def compatible_quickshell(private_prefix):
+    candidates = [private_prefix / 'bin/quickshell', shutil.which('qs'), shutil.which('quickshell')]
+    for candidate in dict.fromkeys(str(p) for p in candidates if p):
+        try:
+            if Path(candidate).is_file() and version(candidate, '0.3.2'):
+                return Path(candidate)
+        except (OSError, RuntimeError, subprocess.SubprocessError):
+            continue
+    return None
 
 
 def guard_suse_transaction(xml):
@@ -154,7 +174,7 @@ def install_dependencies(info, args, private_prefix):
             raise RuntimeError('For transactional openSUSE install dependencies with transactional-update, reboot, then use --skip-deps')
         required = ['distribution-logos-openSUSE-icons', 'libwayland-server0', 'niri', 'xwayland-satellite', 'xwayland', 'python3',
                     'qt6-declarative-imports', 'qt6-wayland', 'libQt6Svg6', 'qt6-shadertools', 'xdg-utils']
-        extras = ['grim', 'wl-clipboard', 'cliphist', 'wf-recorder', 'libnotify-tools',
+        extras = ['gvfs', 'gvfs-backends', 'udisks2', 'xdg-user-dirs', 'grim', 'wl-clipboard', 'cliphist', 'wf-recorder', 'libnotify-tools',
                   'brightnessctl', 'NetworkManager', 'bluez', 'pipewire', 'wireplumber', 'upower', 'inotify-tools',
                   'wtype', 'wlsunset', 'swaybg', 'swaylock', 'inter-fonts', 'dejavu-fonts', 'google-noto-coloremoji-fonts',
                   'adwaita-icon-theme', 'adwaita-icon-theme-legacy', 'kitty', 'zenity', 'jq', 'ImageMagick', 'ffmpeg', 'mpvpaper', 'qt6-multimedia-imports']
@@ -188,7 +208,7 @@ def install_dependencies(info, args, private_prefix):
         manager = 'pacman'
         package_install(manager, ['niri', 'xwayland-satellite', 'xorg-xwayland', 'python', 'quickshell',
             'qt6-declarative', 'qt6-wayland', 'qt6-svg', 'qt6-shadertools', 'xdg-utils'] +
-            (['grim', 'wl-clipboard', 'cliphist', 'wf-recorder', 'libnotify', 'brightnessctl',
+            (['gvfs', 'udisks2', 'xdg-user-dirs', 'grim', 'wl-clipboard', 'cliphist', 'wf-recorder', 'libnotify', 'brightnessctl',
               'networkmanager', 'bluez-utils', 'wireplumber', 'inotify-tools', 'wtype', 'wlsunset',
               'swaybg', 'swaylock', 'ttf-inter', 'ttf-dejavu', 'noto-fonts-emoji', 'adwaita-icon-theme', 'kitty', 'zenity', 'jq', 'imagemagick', 'ffmpeg', 'mpvpaper', 'qt6-multimedia'] if args.extras else []), args.dry_run)
     elif distro == 'fedora' or 'fedora' in family:
@@ -233,6 +253,72 @@ def backup(path):
         print(f'Backup: {dest}')
 
 
+def write_managed_file(path, text):
+    """Avoid launcher backup clutter on an identical reinstall."""
+    if path.is_file() and not path.is_symlink() and path.read_text() == text:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    backup(path)
+    path.write_text(text)
+    path.chmod(0o644 if path.suffix == '.desktop' else 0o755)
+
+
+def payload_hashes(root):
+    return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(root.rglob('*'))
+            if path.is_file() and '__pycache__' not in path.parts and path.suffix != '.pyc'}
+
+
+def owned_paths(config, data, bindir, niri_config):
+    names = ['macshell-niri', 'macshell-niri-session', 'macshell-glass-session', 'macshell-niri-update',
+             'macshell-niri-doctor', 'macshell-niri-emoji', 'macshell-terminal', 'macshell-lock']
+    result = {name: bindir / name for name in names}
+    result.update({'desktop': data / 'applications/macshell-niri.desktop',
+                   'private-config': niri_config, 'glass-config': config / 'niri/macshell-glass.kdl',
+                   'ghostty-launcher': bindir / 'ghostty', 'ghostty-desktop': data / 'applications/com.mitchellh.ghostty.desktop'})
+    return result
+
+
+def save_owned_files(config, data, bindir, niri_config, integrate=False, no_config=False):
+    records = {}
+    for name, path in owned_paths(config, data, bindir, niri_config).items():
+        if name == 'private-config' and integrate: continue
+        if name in ('private-config','glass-config') and no_config: continue
+        if name == 'ghostty-launcher' and (not path.is_file() or str(config / 'quickshell/macshell-niri/scripts/ghostty-compat.py') not in path.read_text()): continue
+        if name == 'ghostty-desktop' and (not path.is_file() or 'X-MacShell-VirtualBox-Ghostty=true' not in path.read_text()): continue
+        if path.is_file() and not path.is_symlink():
+            records[name] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+    state = data / 'macshell-niri/install-files.json'
+    state.parent.mkdir(parents=True, exist_ok=True)
+    records['__payload__'] = payload_hashes(config / 'quickshell/macshell-niri')
+    state.write_text(json.dumps(records, indent=2) + '\n')
+
+
+def remove_owned_files(config, data, bindir, niri_config):
+    state = data / 'macshell-niri/install-files.json'
+    if not state.is_file():
+        print('Legacy installation: preserving launcher/config files without an ownership manifest.')
+        return
+    records = json.loads(state.read_text())
+    keep_ghostty = False
+    for key in ('ghostty-launcher','ghostty-desktop'):
+        record = records.get(key)
+        if record:
+            path = owned_paths(config,data,bindir,niri_config)[key]
+            if path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() != record.get('sha256'): keep_ghostty = True
+    for name, path in owned_paths(config, data, bindir, niri_config).items():
+        if keep_ghostty and name.startswith('ghostty-'):
+            print(f'Kept customized Ghostty integration: {path}')
+            continue
+        record = records.get(name, {})
+        if record.get('path') != str(path) or not path.exists(): continue
+        if not path.is_symlink() and path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == record.get('sha256'):
+            path.unlink()
+        else:
+            print(f'Kept user-modified file: {path}')
+    # Keep the manifest until payload preservation has been decided.
+
+
 def load_configurer():
     spec = importlib.util.spec_from_file_location('configure_niri', SOURCE / 'scripts/configure-niri.py')
     module = importlib.util.module_from_spec(spec)
@@ -262,6 +348,7 @@ def main():
     parser.add_argument('--build-glass', action='store_true', help='Build a separate niri-glass compositor and session for real refraction (openSUSE)')
     parser.add_argument('--no-glass', action='store_true', help='Use ordinary niri instead of installing the Liquid Glass session')
     parser.add_argument('--no-login-session', action='store_true', help='Do not register the Liquid Glass session in the login manager; keep the TTY launcher')
+    parser.add_argument('--icons', choices=['macos-like-dark', 'macos-like-light', 'keep'], default=None, help='Icon theme from original MacShell; use keep to preserve current icons')
     parser.add_argument('--theme', choices=['tahoe-light', 'tahoe-dark', 'keep'], help='Window styling; a new installation defaults to tahoe-dark')
     parser.add_argument('--restore-theme', action='store_true', help='Restore GTK and niri settings saved before Tahoe; do not install anything')
     parser.add_argument('--prepare-vm', action='store_true', help='Opt in to openSUSE VirtualBox kernel and official HTTPS mirror preparation')
@@ -269,9 +356,12 @@ def main():
     parser.add_argument('--no-extras', dest='extras', action='store_false', help='Skip optional feature packages')
     parser.add_argument('--build-quickshell', action='store_true', help='Rebuild private Quickshell (openSUSE)')
     parser.add_argument('--with-wayland-repo', action='store_true', help='Opt in to the openSUSE X11:Wayland development repository')
+    parser.add_argument('--global-appearance', action='store_true', help='Opt in to changing shared GTK/Qt/kitty/icon preferences; default is private-session styling only')
+    parser.add_argument('--integrate-config', action='store_true', help='Opt in to editing the original niri config with backups; default creates a separate macshell.kdl')
     parser.add_argument('--no-config', action='store_true', help='Copy example only; do not edit niri configuration')
     parser.add_argument('--keep-xwayland-config', action='store_true', help='Leave existing Xwayland settings alone')
-    parser.add_argument('--niri-config', type=Path, help='Config path, default: $XDG_CONFIG_HOME/niri/config.kdl')
+    parser.add_argument('--bin-dir', type=Path, help='User launcher directory, default: ~/.local/bin')
+    parser.add_argument('--niri-config', type=Path, help='Seed config to copy; unchanged unless --integrate-config is explicitly supplied')
     parser.add_argument('--uninstall', action='store_true', help='Remove shell files and managed config block, keep dependencies/settings/backups')
     args = parser.parse_args()
     if args.build_glass and args.no_glass:
@@ -293,11 +383,18 @@ def main():
         parser.error('--skip-deps cannot be combined with build/repository/VM preparation options')
     config = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))).expanduser().absolute()
     data = Path(os.environ.get('XDG_DATA_HOME', str(Path.home() / '.local/share'))).expanduser().absolute()
-    bindir = Path.home() / '.local/bin'
+    bindir = (args.bin_dir or Path.home() / '.local/bin').expanduser().absolute()
     target = config / 'quickshell/macshell-niri'
     private_prefix = data / 'macshell-niri/quickshell'
     launcher = bindir / 'macshell-niri'
-    niri_config = (args.niri_config or config / 'niri/config.kdl').expanduser().absolute()
+    if args.icons is None:
+        try:
+            saved_icons = json.loads((data / 'macshell-niri/icon-theme.json').read_text()).get('theme')
+        except (OSError, ValueError):
+            saved_icons = None
+        args.icons = 'macos-like-light' if saved_icons == 'MacOS-Like-Light' or (saved_icons is None and args.theme == 'tahoe-light') else 'macos-like-dark'
+    original_niri_config = (args.niri_config or config / 'niri/config.kdl').expanduser().absolute()
+    niri_config = original_niri_config if args.integrate_config else original_niri_config.with_name('macshell.kdl')
     if args.restore_theme:
         if args.dry_run:
             print('Would restore GTK and niri settings from Tahoe backup')
@@ -307,50 +404,52 @@ def main():
         return
     if (args.theme or args.build_glass) and (args.no_config or args.uninstall):
         parser.error('Theme/refraction options require niri configuration and cannot be used with --uninstall')
-    print(f'Shell: {target}\nLauncher: {launcher}\nNiri config: {niri_config}')
+    print(f'Shell: {target}\nLauncher: {launcher}\nPrivate niri config: {niri_config}\nOriginal config preserved: {original_niri_config}')
     if not args.no_config and not args.uninstall and niri_config.exists():
         configurer = load_configurer()
         current = configurer.managed(niri_config.read_text())
         if not args.keep_xwayland_config:
             configurer.migrate(current)
+    if not args.dry_run and target.is_symlink():
+        raise RuntimeError('Refusing a symlinked installation directory')
     if not args.dry_run and not args.uninstall and target.exists() and not (target / '.macshell-niri-install').is_file():
-        print('An existing directory will be preserved as a timestamped backup.')
+        raise RuntimeError('Refusing to replace an unmanaged shell directory. Move it aside before installing.')
     if args.uninstall:
         if args.dry_run:
             print('Would remove installed shell, launcher, desktop entry and managed niri block; keep packages and backups.')
             return
-        if not args.no_config and niri_config.exists():
-            load_configurer().configure(niri_config, launcher, remove=True)
-        glass_helper = load_glass_builder()
-        glass_helper.remove_login_session(sys.modules[__name__])
-        private_config = config / 'niri/macshell-glass.kdl'
-        if not args.no_config and private_config.exists():
-            load_configurer().configure(private_config, launcher, remove=True,
-                validator=data / 'macshell-niri/niri-glass/bin/niri-glass')
-        (bindir / 'macshell-glass-session').unlink(missing_ok=True)
         if target.is_symlink():
             raise RuntimeError('Refusing to uninstall a symlinked shell directory')
         if target.exists():
             if not (target / '.macshell-niri-install').is_file():
                 raise RuntimeError('Directory is not marked as a MacShell niri installation; refusing to delete it')
-            shutil.rmtree(target)
-        launcher.unlink(missing_ok=True)
-        (bindir / 'macshell-terminal').unlink(missing_ok=True)
-        (bindir / 'macshell-lock').unlink(missing_ok=True)
-        (data / 'applications/macshell-niri.desktop').unlink(missing_ok=True)
-        print('Removed. Xwayland migration remains active; restore a config backup to undo it.')
+        if args.integrate_config and not args.no_config and niri_config.exists():
+            load_configurer().configure(niri_config, launcher, remove=True)
+        glass_helper = load_glass_builder()
+        glass_helper.remove_login_session(sys.modules[__name__], data, bindir)
+        remove_owned_files(config, data, bindir, niri_config)
+        if target.exists():
+            manifest_path = data / 'macshell-niri/install-files.json'
+            previous = json.loads(manifest_path.read_text()).get('__payload__') if manifest_path.is_file() else None
+            if previous is None or payload_hashes(target) != previous:
+                backup(target)
+                print('Preserved the modified/legacy shell payload as a recovery backup.')
+            else:
+                shutil.rmtree(target)
+        (data / 'macshell-niri/install-files.json').unlink(missing_ok=True)
+        print('Removed MacShell session. Personal settings, recovery backups and installed dependencies/assets were kept. Select Plasma at login to return.')
         return
     if args.skip_deps:
-        binary = next((p for p in [private_prefix / 'bin/quickshell', shutil.which('qs'), shutil.which('quickshell')]
-                       if p and Path(p).is_file()), None)
-        if not args.dry_run and (not binary or not version(binary, '0.3.2')):
+        binary = Path('quickshell') if args.dry_run else compatible_quickshell(private_prefix)
+        if not args.dry_run and binary is None:
             raise RuntimeError('Quickshell >= 0.3.2 is required')
-        binary = Path(binary or 'quickshell')
     else:
         binary = install_dependencies(os_release(), args, private_prefix)
     if args.deps_only:
         print('Dependencies checked/installed. No shell files or compositor configuration changed.')
         return
+    if not args.dry_run and not (config / 'user-dirs.dirs').exists() and shutil.which('xdg-user-dirs-update'):
+        run(['xdg-user-dirs-update'])
     for tool, minimum in [('niri', '26.04'), ('xwayland-satellite', '0.7')]:
         if not version(tool, minimum, args.dry_run):
             raise RuntimeError(f'{tool} >= {minimum} required for rootless Xwayland integration')
@@ -360,14 +459,16 @@ def main():
         glass_builder = load_glass_builder()
         glass_binary = glass_builder.ensure(sys.modules[__name__], data, args.skip_deps, args.dry_run, args.build_glass)
     if args.dry_run:
+        icons = load_icons()
+        icons.apply(config, data, {'macos-like-dark': 'MacOS-Like-Dark', 'macos-like-light': 'MacOS-Like-Light', 'keep': 'keep'}[args.icons], dry=True, global_preferences=args.global_appearance)
         print(f'Would copy QML/assets/scripts to {target}, backing up any previous install.')
         print('Would write launcher and desktop entry. Would NOT launch the shell.')
         if not args.no_config:
-            print('Would back up, migrate Xwayland settings, validate candidate, then update niri config.')
+            print('Would create/update a separate niri config, validate it and preserve the original. Shared configuration changes require --integrate-config.')
         if args.cursor != 'keep' and not args.no_config:
             print(f'Would install Bibata Modern Classic cursor at {args.cursor_size}px.')
         if args.theme:
-            print('Would apply bundled Tahoe GTK theme and niri window styles with a rollback backup.')
+            print('Would apply bundled Tahoe GTK theme assets and private niri window styles; shared preferences require --global-appearance.')
         if not args.no_clock_fonts:
             print('Would install bundled OFL clock fonts into the private user font directory.')
         if glass_binary:
@@ -384,6 +485,8 @@ def main():
     migration = importlib.util.module_from_spec(migration_spec)
     migration_spec.loader.exec_module(migration)
     migration.migrate(config)
+    if args.icons != 'keep':
+        load_icons().verify()
     # Stage the payload before replacing an existing install.
     stage = Path(tempfile.mkdtemp(prefix='.macshell-stage-', dir=target.parent))
     try:
@@ -393,50 +496,67 @@ def main():
         for directory in ('scripts', 'config', 'vendor', 'assets', 'MacLock'):
             shutil.copytree(SOURCE / directory, stage / directory, ignore=shutil.ignore_patterns('__pycache__'))
         shutil.copy2(SOURCE / 'LICENSE', stage / 'LICENSE')
+        shutil.copy2(SOURCE / 'UPSTREAM_REVISION', stage / 'UPSTREAM_REVISION')
+        try:
+            revision = subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True, stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError):
+            revision = 'local'
+        (stage / '.macshell-version.json').write_text(json.dumps({'repository': 'Artemnuhka/MacShell-niri', 'revision': revision,
+            'upstream': (SOURCE / 'UPSTREAM_REVISION').read_text().strip()}))
         (stage / '.macshell-niri-install').write_text('1\n')
-        backup(target)
-        stage.rename(target)
+        if target.is_dir() and payload_hashes(target) == payload_hashes(stage):
+            print('Installed payload is identical; no extra backup created.')
+        else:
+            backup(target)
+            stage.rename(target)
     finally:
         if stage.exists():
             shutil.rmtree(stage)
+    icons = load_icons()
+    icons.apply(config, data, {'macos-like-dark': 'MacOS-Like-Dark', 'macos-like-light': 'MacOS-Like-Light', 'keep': 'keep'}[args.icons], global_preferences=args.global_appearance)
     bindir.mkdir(parents=True, exist_ok=True)
-    backup(launcher)
-    launcher.write_text('#!/bin/sh\nset -eu\n' +
+    write_managed_file(launcher, '#!/bin/sh\nset -eu\n' +
         'if [ -z "${NIRI_SOCKET:-}" ]; then echo "Start this shell inside a niri session." >&2; exit 1; fi\n' +
         'export QT_QPA_PLATFORM=wayland\n' +
-        'export QS_ICON_THEME="${QS_ICON_THEME:-Adwaita}"\n' +
         'export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"\n' +
         'export QSG_USE_SIMPLE_ANIMATION_DRIVER="${QSG_USE_SIMPLE_ANIMATION_DRIVER:-1}"\n' +
         'exec ' + shlex.quote(sys.executable) + ' ' +
         shlex.quote(str(target / 'scripts/shell-session.py')) + ' ' + shlex.quote(str(binary)) +
         ' ' + shlex.quote(str(target)) + ' "$@"\n')
-    launcher.chmod(0o755)
-    lock_binary = next((candidate for candidate in [binary, shutil.which('qs'), shutil.which('quickshell')]
+    updater = bindir / 'macshell-niri-update'
+    write_managed_file(updater, '#!/bin/sh\nexec ' + shlex.quote(sys.executable) + ' ' + shlex.quote(str(target / 'scripts/update.py')) + ' "$@"\n')
+    for name, script in [('macshell-niri-doctor', 'graphics.py'), ('macshell-niri-emoji', 'emoji.py')]:
+        helper = bindir / name
+        write_managed_file(helper, '#!/bin/sh\nexec ' + shlex.quote(sys.executable) + ' ' + shlex.quote(str(target / 'scripts' / script)) + ' "$@"\n')
+    run([sys.executable, target / 'scripts/graphics.py', 'configure'])
+    lock_binary = next((candidate for candidate in [binary, shutil.which('qs'), shutil.which('quickshell'), Path('/usr/bin/qs'), Path('/usr/bin/quickshell')]
                         if candidate and pam_capable(candidate)), None)
     lock_launcher = bindir / 'macshell-lock'
-    backup(lock_launcher)
     if lock_binary:
-        lock_launcher.write_text('#!/bin/sh\nexport QT_QPA_PLATFORM=wayland\nexport MACSHELL_LOCK_BINARY=' +
+        write_managed_file(lock_launcher, '#!/bin/sh\nexport QT_QPA_PLATFORM=wayland\nexport MACSHELL_LOCK_BINARY=' +
             shlex.quote(str(lock_binary)) + '\nexec ' + shlex.quote(sys.executable) + ' ' +
             shlex.quote(str(target / 'scripts/maclock.py')) + ' "$@"\n')
         print(f'MacLock PAM backend: {lock_binary}')
     else:
-        lock_launcher.write_text('#!/bin/sh\necho "MacLock requires Quickshell with PAM support. Reinstall with --build-quickshell." >&2\nexit 1\n')
+        write_managed_file(lock_launcher, '#!/bin/sh\necho "MacLock requires Quickshell with PAM support. Reinstall with --build-quickshell." >&2\nexit 1\n')
         print('MacLock unavailable: no PAM-capable Quickshell; existing screen-lock keybinding preserved.')
-    lock_launcher.chmod(0o755)
     terminal = bindir / 'macshell-terminal'
-    backup(terminal)
-    terminal.write_text('#!/bin/sh\nexec ' + shlex.quote(sys.executable) + ' ' +
+    write_managed_file(terminal, '#!/bin/sh\nexec ' + shlex.quote(sys.executable) + ' ' +
         shlex.quote(str(target / 'scripts/launch-kitty.py')) + ' \"$@\"\n')
-    terminal.chmod(0o755)
+    ghostty_spec = importlib.util.spec_from_file_location('ghostty_compat', SOURCE / 'scripts/ghostty-compat.py')
+    ghostty = importlib.util.module_from_spec(ghostty_spec)
+    ghostty_spec.loader.exec_module(ghostty)
+    ghostty.install(target, bindir, data)
     apps = data / 'applications'
     apps.mkdir(parents=True, exist_ok=True)
     desktop = apps / 'macshell-niri.desktop'
-    backup(desktop)
     desktop_exec = str(launcher).replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$').replace('%', '%%')
-    desktop.write_text('[Desktop Entry]\nType=Application\nName=MacShell for niri\n' +
+    write_managed_file(desktop, '[Desktop Entry]\nType=Application\nName=MacShell for niri\n' +
         f'Exec="{desktop_exec}"\nIcon=' + str(target / 'assets/icons/settings.svg') + '\nTerminal=false\nCategories=Settings;\n')
     if not args.no_config:
+        if not args.integrate_config and not niri_config.exists() and original_niri_config.is_file():
+            niri_config.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(original_niri_config, niri_config)
         load_configurer().configure(niri_config, launcher, not args.keep_xwayland_config, lock_launcher=lock_launcher if lock_binary else None)
     private_glass_config = config / 'niri/macshell-glass.kdl'
     private_glass_binary = data / 'macshell-niri/niri-glass/bin/niri-glass'
@@ -446,19 +566,27 @@ def main():
             validator=private_glass_binary, lock_launcher=lock_launcher if lock_binary else None)
     if args.theme:
         import tahoe
-        tahoe.apply(config, data, niri_config, 'Dark' if args.theme.endswith('dark') else 'Light')
+        tahoe.apply(config, data, niri_config, 'Dark' if args.theme.endswith('dark') else 'Light', global_preferences=args.global_appearance)
     if args.cursor != 'keep' and not args.no_config:
         import cursor
-        cursor.apply(sys.modules[__name__], config, data, niri_config, args.cursor_size)
+        cursor.apply(sys.modules[__name__], config, data, niri_config, args.cursor_size, global_preferences=args.global_appearance)
     if not args.no_clock_fonts:
         font_spec = importlib.util.spec_from_file_location('clock_fonts', SOURCE / 'scripts/clock-fonts.py')
         fonts = importlib.util.module_from_spec(font_spec)
         font_spec.loader.exec_module(fonts)
         fonts.install(data)
+    if not args.no_config:
+        session_launcher = bindir / 'macshell-niri-session'
+        write_managed_file(session_launcher, '#!/bin/sh\nset -eu\n' +
+            'if [ -n "${WAYLAND_DISPLAY:-}" ] || [ -n "${DISPLAY:-}" ]; then echo "Start this session from a TTY or login manager." >&2; exit 1; fi\n' +
+            'export MACSHELL_NIRI_CONFIG=' + shlex.quote(str(niri_config)) + '\n' +
+            'exec niri --session --config ' + shlex.quote(str(niri_config)) + ' "$@"\n')
+        session_launcher.chmod(0o755)
     if glass_binary:
         glass_builder.session(sys.modules[__name__], data, config, bindir, niri_config, glass_binary)
         if not args.no_login_session:
             glass_builder.login_session(sys.modules[__name__], data, bindir)
+    save_owned_files(config, data, bindir, niri_config, args.integrate_config, args.no_config)
     if glass_binary:
         if not args.no_login_session:
             print('Installed. Log out and select MacShell Liquid Glass in the login manager.')
@@ -467,7 +595,7 @@ def main():
         print(f'Without a login manager, start from a text TTY: {bindir / "macshell-glass-session"}')
     else:
         print(f'Installed. Log into the niri session to use rootless Xwayland. Start the shell with: {launcher}')
-    print('MacShell keybindings were added where there was no existing binding; existing bindings were preserved.')
+    print('MacShell uses a separate session/config by default. Existing Plasma, GTK/Qt preferences and the original niri configuration are preserved.')
     print('Stop overlapping bars/notification daemons manually. This installer does not stop services or start the shell.')
 
 

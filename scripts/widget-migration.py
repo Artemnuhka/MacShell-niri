@@ -1,5 +1,6 @@
 """Migrate the original widget layout without modifying or deleting its source."""
 import json
+import math
 from pathlib import Path
 
 
@@ -9,8 +10,12 @@ def migrate(config):
     if new.exists() or not old.is_file():
         return
     source = json.loads(old.read_text())
+    scale = source.get('widgetScale', 1)
+    if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(scale):
+        scale = 1
+    scale = max(0.6, min(1.5, scale))
     widgets = []
-    types = {'weather': 'weather', 'calendar': 'calendar', 'clock': 'clock', 'player': 'music'}
+    types = {'weather': 'weather', 'calendar': 'calendar', 'clock': 'clock', 'player': 'music', 'image': 'image'}
     for index, item in enumerate(source.get('widgets', [])):
         if not isinstance(item, dict) or item.get('type') not in types:
             continue
@@ -19,13 +24,13 @@ def migrate(config):
                         'size': {'small': 's', 'medium': 'm', 'large': 'l'}.get(item.get('size'), 's'),
                         'style': 'glass' if item.get('style') == 'liquid' else 'opaque',
                         'x': max(8, float(item.get('x', 32))),
-                        'y': max(36, float(item.get('y', 56))), 'screen': ''})
+                        'y': max(36, float(item.get('y', 56))), 'screen': '', 'src': str(item.get('src', ''))})
     new.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation protects an already-created new layout during an update.
     try:
         with new.open('x') as stream:
             json.dump({'enabled': True, 'style': 'glass', 'glassAmt': 0.5,
-                       'blurAmt': 0.5, 'cityName': source.get('cityName', ''), 'widgets': widgets}, stream, indent=2)
+                       'blurAmt': 0.5, 'widgetScale': scale, 'cityName': source.get('cityName', ''), 'widgets': widgets}, stream, indent=2)
     except FileExistsError:
         return
     print(f'Migrated widget layout: {old} -> {new}; original preserved.')

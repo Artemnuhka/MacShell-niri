@@ -51,6 +51,34 @@ class WidgetMigration(unittest.TestCase):
             widgets.migrate(config)
             self.assertEqual((config / 'macshell/widgets.json').read_text(), '{"widgets": []}')
 
+    def test_preserves_selected_images_and_scale(self):
+        import json
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory)
+            old = config / 'macwidgets/settings.json'
+            old.parent.mkdir()
+            original = json.dumps({'widgetScale': 1.3, 'widgets': [{'id': 'photo', 'type': 'image',
+                'size': 'large', 'src': '/home/example/Pictures/my photo.png'}]})
+            old.write_text(original)
+            widgets.migrate(config)
+            new = json.loads((config / 'macshell/widgets.json').read_text())
+            self.assertEqual(new['widgetScale'], 1.3)
+            self.assertEqual(new['widgets'][0]['type'], 'image')
+            self.assertEqual(new['widgets'][0]['src'], '/home/example/Pictures/my photo.png')
+            self.assertEqual(old.read_text(), original)
+
+    def test_invalid_legacy_scale_does_not_block_installation(self):
+        import json
+        for scale in [None, 'invalid', True, float('nan')]:
+            with self.subTest(scale=scale), tempfile.TemporaryDirectory() as directory:
+                config = Path(directory)
+                old = config / 'macwidgets/settings.json'
+                old.parent.mkdir()
+                old.write_text(json.dumps({'widgetScale': scale, 'widgets': []}))
+                widgets.migrate(config)
+                new = json.loads((config / 'macshell/widgets.json').read_text())
+                self.assertEqual(new['widgetScale'], 1)
+
 
 class GlassInstallation(unittest.TestCase):
     def test_update_reuses_pinned_binary_without_build_or_packages(self):
@@ -99,11 +127,51 @@ class GlassInstallation(unittest.TestCase):
                  patch.object(installer, 'run', side_effect=AssertionError('unexpected sudo')):
                 with self.assertRaisesRegex(RuntimeError, 'unmanaged'):
                     glass.login_session(installer, Path(directory), Path(directory))
-                with self.assertRaisesRegex(RuntimeError, 'unmanaged'):
-                    glass.remove_login_session(installer)
+                glass.remove_login_session(installer, Path(directory) / 'data', Path(directory) / 'bin')
+                self.assertTrue(path.exists())
+
+    def test_login_removal_is_scoped_to_installation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'session.desktop'
+            bindir = root / 'bin'
+            text = f'Exec="{bindir}/macshell-glass-session"\nX-MacShell-Owner={os.getuid()}\n'
+            path.write_text(text)
+            with patch.object(glass, 'session_path', return_value=path), patch.object(installer, 'run') as run:
+                glass.remove_login_session(installer, root / 'other-data', bindir)
+                run.assert_not_called()
+                staged = root / 'data/macshell-niri/login-session.desktop'
+                staged.parent.mkdir(parents=True)
+                staged.write_text(text)
+                glass.remove_login_session(installer, root / 'data', root / 'other-bin')
+                run.assert_not_called()
+                glass.remove_login_session(installer, root / 'data', bindir)
+                run.assert_called_once()
+                self.assertFalse(staged.exists())
 
 
 class ConfigMigration(unittest.TestCase):
+    def test_reinstall_keeps_managed_block_before_theme_and_cursor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'config.kdl'
+            launcher = Path(directory) / 'bin/macshell-niri'
+            path.write_text('binds {}\n')
+            with patch.object(config.subprocess, 'run', return_value=SimpleNamespace(returncode=0)):
+                config.configure(path, launcher)
+                path.write_text(path.read_text() + '\n// custom theme follows managed block\nwindow-rule { geometry-corner-radius 18; }\ncursor { xcursor-size 20; }\n')
+                expected = path.read_text()
+                backups = list(path.parent.glob('*.macshell-backup-*'))
+                config.configure(path, launcher)
+                self.assertEqual(path.read_text(), expected)
+                self.assertEqual(list(path.parent.glob('*.macshell-backup-*')), backups)
+
+    def test_number_shortcuts_do_not_precreate_nine_workspaces(self):
+        example = (ROOT / 'config/niri.example.kdl').read_text()
+        for number in range(1, 10):
+            self.assertIn(f'Mod+{number} {{ focus-workspace {number}; }}', example)
+        self.assertFalse(any(name == 'workspace' for name, *_ in config.nodes(example)))
+
+
     def test_adds_shortcuts_without_overwriting_existing_bindings(self):
         before = 'binds {\n    Mod+Space { toggle-window-floating; }\n}\n'
         after = config.merge_keybinds(before, Path('/tmp/my shell'))
@@ -270,6 +338,7 @@ class InstallerPlan(unittest.TestCase):
             self.assertNotIn('prepare-opensuse.py', output.getvalue())
             self.assertIn('Would register MacShell Liquid Glass', output.getvalue())
             self.assertIn('Would apply bundled Tahoe GTK theme', output.getvalue())
+            self.assertIn('Would install and select bundled MacOS-Like-Dark', output.getvalue())
             self.assertIn('--jobs 1', output.getvalue())
 
     def test_suse_build_plan_uses_private_prefix(self):
@@ -359,3 +428,12 @@ class UpstreamSettings(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class QuickshellSelection(unittest.TestCase):
+    def test_new_quickshell_is_found_even_when_old_qs_precedes_it(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); old = root / 'qs'; new = root / 'quickshell'
+            old.touch(); new.touch()
+            with patch.object(installer.shutil, 'which', side_effect=lambda name: str(old if name == 'qs' else new)), patch.object(installer, 'version', side_effect=lambda path, minimum: Path(path) == new):
+                self.assertEqual(installer.compatible_quickshell(root / 'private'), new)

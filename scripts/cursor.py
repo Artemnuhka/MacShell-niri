@@ -12,7 +12,7 @@ THEME = 'Bibata-Modern-Classic'
 SHA256 = '7d3495864e5bbef02f5e77de760b2905903b63c71495a78ef6306d19a3b556d8'
 
 
-def apply(installer, config, data, niri_config, size=20, dry=False):
+def apply(installer, config, data, niri_config, size=20, dry=False, global_preferences=True):
     if dry:
         print(f'Would install {THEME}, set niri and GTK cursor size {size}, backing up configuration.')
         return
@@ -31,7 +31,7 @@ def apply(installer, config, data, niri_config, size=20, dry=False):
         for name, _, x, y in reversed(parser.nodes(inner)):
             if name in ('xcursor-theme', 'xcursor-size'):
                 inner = inner[:x] + inner[y:]
-        text = text[:a] + '\n' + settings + inner + text[b:]
+        text = text[:a] + '\n' + settings + inner.strip() + '\n' + text[b:]
     else:
         text = text.rstrip() + '\n\ncursor {\n' + settings + '}\n'
     target = data / 'icons' / THEME
@@ -62,6 +62,9 @@ def apply(installer, config, data, niri_config, size=20, dry=False):
             if not backup.exists():
                 shutil.copy2(niri_config, backup)
             niri_config.write_text(text)
+    if not global_preferences:
+        print(f'Cursor installed for the private niri session only: {THEME}, {size}px.')
+        return
     for version in ('3.0', '4.0'):
         path = config / ('gtk-' + version) / 'settings.ini'
         path.parent.mkdir(parents=True, exist_ok=True)

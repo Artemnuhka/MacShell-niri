@@ -74,10 +74,11 @@ def restore(config, data):
     print('Restored GTK and niri settings saved before Tahoe installation. Theme assets remain installed.')
 
 
-def apply(config, data, niri_config, color):
+def apply(config, data, niri_config, color, global_preferences=True):
     state, paths = locations(config, data)
+    if not global_preferences: paths = []
     paths.append(niri_config)
-    paths.append(config / 'kitty')
+    if global_preferences: paths.append(config / 'kitty')
     for path in paths:
         if path.is_symlink():
             raise RuntimeError(f'Refusing to replace symlinked configuration: {path}')
@@ -134,6 +135,13 @@ def apply(config, data, niri_config, color):
         erase(theme_root)
         shutil.copytree(stage / theme, theme_root)
         (theme_root / '.macshell-theme').write_text(REVISION + '\n')
+        if not global_preferences:
+            niri_config.write_text(text)
+            appearance = data / 'macshell-niri/session-appearance.json'
+            appearance.parent.mkdir(parents=True, exist_ok=True)
+            appearance.write_text(json.dumps({'gtk_theme': theme}))
+            print(f'Installed {theme} assets and private niri window rules; shared GTK/kitty preferences preserved.')
+            return
         for version in ('3.0', '4.0'):
             dest = config / ('gtk-' + version)
             dest.mkdir(parents=True, exist_ok=True)

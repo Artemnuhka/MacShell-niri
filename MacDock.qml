@@ -1,5 +1,6 @@
 // MacShell Dock for niri. See README.md and config/niri.example.kdl.
 import QtQuick
+import "DisplayState.js" as Displays
 import QtQuick.Effects
 import QtQuick.Controls
 import Quickshell
@@ -13,6 +14,7 @@ Scope {
 
     // shared helpers from shell.qml (window geometry poller, wallpaper lookup)
     property var hub: null
+    readonly property bool settingsVisible: prefsWindow.visible
     property bool settingsEnabled: true
     property bool dockEnabled: true      // false = no Dock at all (settings window stays available)
     readonly property var bar: hub ? hub.bar : null
@@ -20,9 +22,8 @@ Scope {
 
     // ═════ Displays: main display + resolution / refresh, with a macOS-style "keep or revert" safety net ═════
     property var displays: ({ primary: "", modes: {} })      // saved in ~/.config/macshell/displays.json
-    property var monList: []                                  // hyprctl monitors (live)
+    property var monList: []                                  // live niri output modes
     property string pendingOut: ""                            // a mode change waiting for "Keep"
-    property string pendingPrev: ""
     property int revertLeft: 0
     FileView {
         id: dispFile
@@ -35,57 +36,96 @@ Scope {
     Process {
         id: monListProc
         command: ["python3", Qt.resolvedUrl("scripts/niri-settings.py").toString().replace(/^file:\/\//, ""), "monitors"]
-        stdout: StdioCollector { onStreamFinished: { try { root.monList = JSON.parse(text); } catch (e) {} } }
+        stdout: StdioCollector { onStreamFinished: { try { root.monList = JSON.parse(text); root.restoreConnectedDisplays(); } catch (e) {} } }
     }
     function modeOf(m) { return m.width + "x" + m.height + "@" + Number(m.refreshRate).toFixed(2); }
-    function applyMode(out, mode) {
-        Quickshell.execDetached(["niri", "msg", "output", out, "mode", mode]);
+    function applyDisplay(out, values) {
+        if (values.mode) Quickshell.execDetached(["niri", "msg", "output", out, "mode", values.mode]);
+        if (values.scale) Quickshell.execDetached(["niri", "msg", "output", out, "scale", String(values.scale)]);
+        if (values.position) Quickshell.execDetached(["niri", "msg", "output", out, "position", "set", String(values.position.x), String(values.position.y)]);
         monRefreshSoon.restart();
     }
     Timer { id: monRefreshSoon; interval: 700; onTriggered: root.refreshMons() }
-    // change a monitor's mode; it reverts by itself after 15 s unless kept
-    function tryMode(out, mode) {
+    property var pendingValues: ({})
+    property var previousValues: ({})
+    property var seenDisplays: []
+    function tryDisplay(out, changes) {
         var m = null;
         for (var i = 0; i < monList.length; i++) if (monList[i].name === out) m = monList[i];
         if (!m) return;
-        if (pendingOut === "") pendingPrev = modeOf(m);
+        if (pendingOut !== "" && pendingOut !== out) revertMode();
+        if (pendingOut === "") previousValues = {mode: modeOf(m), scale: m.scale, position: {x: m.x, y: m.y}};
         pendingOut = out;
-        applyMode(out, mode);
-        pendingMode = mode;
-        revertLeft = 15;
-        revertTimer.restart();
+        var values = Object.assign({}, pendingValues, changes);
+        pendingValues = values;
+        applyDisplay(out, changes);
+        revertLeft = 15; revertTimer.restart();
     }
-    property string pendingMode: ""
+    function tryMode(out, mode) { tryDisplay(out, {mode: mode}); }
+    function arrangeDisplay(out, direction) {
+        var current = monList.filter(function(m) { return m.name === out; })[0];
+        var others = monList.filter(function(m) { return m.name !== out; });
+        if (!current || !others.length) return;
+        var anchor = others.filter(function(m) { return m.name === mainDisplay; })[0] || others[0];
+        var x = anchor.x, y = anchor.y;
+        if (direction === 0) x -= current.logicalWidth;
+        if (direction === 1) x += anchor.logicalWidth;
+        if (direction === 2) y -= current.logicalHeight;
+        if (direction === 3) y += anchor.logicalHeight;
+        tryDisplay(out, {position: {x: Math.round(x), y: Math.round(y)}});
+    }
     Timer {
         id: revertTimer; interval: 1000; repeat: true
         onTriggered: { root.revertLeft--; if (root.revertLeft <= 0) root.revertMode(); }
     }
     function keepMode() {
         revertTimer.stop();
-        var d = displays, mm = {}; for (var k in d.modes) mm[k] = d.modes[k];
-        mm[pendingOut] = pendingMode;
-        displays = { primary: d.primary || "", modes: mm };
-        saveDisplays();
-        pendingOut = ""; pendingMode = "";
+        var d = Object.assign({}, displays), outputs = Object.assign({}, d.outputs || {});
+        outputs[pendingOut] = Object.assign({}, outputs[pendingOut] || {}, pendingValues);
+        d.outputs = outputs;
+        // Migrate the old resolution-only entry so it cannot override this saved state.
+        d.modes = Object.assign({}, d.modes || {}); delete d.modes[pendingOut];
+        displays = d; saveDisplays();
+        pendingOut = ""; pendingValues = ({});
     }
     function revertMode() {
         revertTimer.stop();
-        if (pendingOut !== "" && pendingPrev !== "") applyMode(pendingOut, pendingPrev);
-        pendingOut = ""; pendingMode = "";
+        if (pendingOut !== "") applyDisplay(pendingOut, previousValues);
+        pendingOut = ""; pendingValues = ({});
+    }
+    function restoreConnectedDisplays() {
+        var names = monList.map(function(m) { return m.name; });
+        names.forEach(function(name) {
+            if (seenDisplays.indexOf(name) >= 0 || name === pendingOut) return;
+            var values = (displays.outputs || {})[name];
+            if (values) applyDisplay(name, values);
+            else if ((displays.modes || {})[name]) applyDisplay(name, {mode: displays.modes[name]});
+        });
+        seenDisplays = names;
     }
     function applySavedModes() {
-        var mm = displays.modes || {};
-        for (var k in mm) Quickshell.execDetached(["niri", "msg", "output", k, "mode", mm[k]]);
         if (displays.primary) root.monitorPrimary = displays.primary;
-        refreshMons();
+        seenDisplays = []; refreshMons();
+    }
+    IpcHandler {
+        target: "displays"
+        function state(): string { return JSON.stringify({outputs: root.monList, pending: root.pendingOut, seconds: root.revertLeft}); }
+        function scale(output: string, value: real): void { if (isFinite(value) && value >= 0.5 && value <= 4) root.tryDisplay(output, {scale: value}); }
+        function keep(): void { if (root.pendingOut !== "") root.keepMode(); }
+        function revert(): void { root.revertMode(); }
     }
     property string monitorPrimary: ""
+    readonly property string mainDisplay: Displays.primary(Quickshell.screens, monitorPrimary, hub && hub.compositor.focusedMonitor ? hub.compositor.focusedMonitor.name : "")
+    readonly property string effectiveMonitor: monitor === "" ? "" : Displays.target(Quickshell.screens, monitor, mainDisplay, hub && hub.compositor.focusedMonitor ? hub.compositor.focusedMonitor.name : "")
+    Connections { target: Quickshell; function onScreensChanged() { monRefreshSoon.restart(); } }
+    Connections { target: root.hub ? root.hub.compositor : null; function onOutputsChanged() { monRefreshSoon.restart(); } }
+
     function setPrimary(name) {
         var d = displays;
-        displays = { primary: name, modes: d.modes || {} };
+        displays = Object.assign({}, d, {primary: name});
         saveDisplays();
         monitorPrimary = name;
-        root.monitor = name;                                         // the Dock lives on the main display
+        // Changing the primary display does not silently change the Dock placement mode.
     }
     Process {
         running: true
@@ -107,7 +147,7 @@ Scope {
     property int hPad: 10
     property int topPad: 8
     property int bottomPad: 9            // room under icons (running dots live here)
-    property int cornerRadius: 18
+    property int cornerRadius: 22
     property int margin: 6
     property bool darkMode: true
     property string dockStyle: "liquid"   // "blur" = Normal Blur, "liquid" = Apple Liquid Glass
@@ -579,10 +619,10 @@ Scope {
     Window {
         id: prefsWindow
         title: "macshell Settings"
-        width: 820
-        height: 600
-        minimumWidth: 700
-        minimumHeight: 500
+        width: 720
+        height: 520
+        minimumWidth: 620
+        minimumHeight: 420
         visible: false
         color: "transparent"
         flags: Qt.Window | Qt.FramelessWindowHint
@@ -591,6 +631,15 @@ Scope {
         QtObject {
             id: prefsGlassGeo
             readonly property var g: {
+                var windows = root.hub ? root.hub.compositor.windows : [];
+                for (var wi = 0; wi < windows.length; wi++) {
+                    var window = windows[wi], layout = window.data ? window.data.layout : null;
+                    if (window.title !== prefsWindow.title || !layout || !layout.tile_pos_in_workspace_view) continue;
+                    var output = window.workspace ? root.hub.compositor.outputs[window.workspace.output] : null;
+                    if (!output || !output.logical) continue;
+                    var pos = layout.tile_pos_in_workspace_view, offset = layout.window_offset_in_tile || [0, 0];
+                    return {x: pos[0] + offset[0], y: pos[1] + offset[1], mw: output.logical.width, mh: output.logical.height, mon: window.workspace.output};
+                }
                 var cs = root.glassClients || [], ms = root.hub ? (root.hub.monData || []) : [];
                 for (var i = 0; i < cs.length; i++) {
                     var c = cs[i];
@@ -691,7 +740,7 @@ Scope {
             readonly property bool glass: root.liquidActive
             readonly property color content: glass ? (dark ? Qt.rgba(0.10, 0.10, 0.11, 0.82) : Qt.rgba(0.97, 0.97, 0.98, 0.88))
                                                    : (dark ? "#242426" : "#F5F5F7")
-            readonly property color sidebar: dark ? "#292929" : "#E9E9EC"
+            readonly property color sidebar: glass ? (dark ? Qt.rgba(0.14, 0.14, 0.15, 0.68) : Qt.rgba(0.94, 0.94, 0.95, 0.72)) : (dark ? "#292929" : "#E9E9EC")
             readonly property color card: glass ? (dark ? Qt.rgba(1, 1, 1, 0.065) : Qt.rgba(1, 1, 1, 0.55))
                                                 : (dark ? "#2B2B2D" : "#FFFFFF")
             readonly property color cardBorder: dark ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(0, 0, 0, 0.07)
@@ -735,8 +784,8 @@ Scope {
             layer.enabled: true
             layer.effect: MultiEffect { maskEnabled: true; maskSource: windowCornerMask; autoPaddingEnabled: false }
 
-            // Settings uses dense frosted vibrancy, as in the Tahoe fork. Cache a
-            // blurred wallpaper crop instead of exposing readable windows behind it.
+            // Frosted vibrancy uses the scene captured before this window opens.
+            // Window positions come from niri in logical coordinates; the snapshot stays frozen.
             Loader {
                 anchors.fill: parent
                 z: -1
@@ -754,9 +803,15 @@ Scope {
                             asynchronous: true
                         }
                     }
+                    Image {
+                        id: settingsScene
+                        width: prefsGlassGeo.mw; height: prefsGlassGeo.mh
+                        source: root.prefsSceneUrl; cache: false; asynchronous: false; visible: false
+                        fillMode: Image.Stretch
+                    }
                     ShaderEffectSource {
                         id: settingsCrop
-                        sourceItem: settingsBackdrop
+                        sourceItem: root.prefsSceneUrl !== "" && !root.sceneGlass ? settingsScene : settingsBackdrop
                         sourceRect: Qt.rect(prefsGlassGeo.x, prefsGlassGeo.y, frame.width, frame.height)
                         textureSize: Qt.size(Math.round(frame.width / 2), Math.round(frame.height / 2))
                         live: true
@@ -887,6 +942,8 @@ Scope {
                             property real dark: root.darkMode ? 1 : 0
                             property real debug: 0
                             property real shadowAmt: 0.6
+                            property real rimTint: 0
+                            property real ringW: 0
                         }
                     }
                 }
@@ -1285,6 +1342,27 @@ Scope {
                     }
                     SRow {
                         t: pal
+                        title: "Widget size"
+                        subtitle: "Scale the widgets and desktop grid together"
+                        SSlider {
+                            t: pal; from: 0.6; to: 1.5; stepSize: 0.05
+                            value: root.hub && root.hub.widgets ? root.hub.widgets.widgetScale : 1
+                            leftLabel: "60%"; rightLabel: "150%"
+                            onMoved: v => { if (root.hub && root.hub.widgets) root.hub.widgets.widgetScale = Math.round(v * 100) / 100; }
+                        }
+                    }
+                    SRow {
+                        t: pal; title: "Reference widgets"
+                        subtitle: "Original MacShell clock, calendar, weather and player, with matching glass and corners"
+                        SSwitch { t: pal; checked: root.hub && root.hub.widgets ? root.hub.widgets.referenceWidgets : true; onToggled: v => { if (root.hub && root.hub.widgets) root.hub.widgets.referenceWidgets = v; } }
+                    }
+                    SRow {
+                        t: pal; title: "Live scene glass"
+                        subtitle: "Experimental: refract application windows using the private niri compositor. Off uses the original MacShell material."
+                        SSwitch { t: pal; checked: root.sceneGlass; onToggled: v => root.sceneGlass = v }
+                    }
+                    SRow {
+                        t: pal
                         title: "Widget style"
                         subtitle: "Liquid Glass refracts the wallpaper, Frosted blurs it, Tinted uses the accent colour, Opaque is a solid card"
                         SSegmented {
@@ -1351,13 +1429,25 @@ Scope {
                                         text: ({ s: "Small", m: "Medium", l: "Large" })[modelData]
                                         onClicked: {
                                             var w = root.hub.widgets;
-                                            w.add(parent.parent.parent.modelData.type, modelData, w.mainScreen);
+                                            if (parent.parent.parent.modelData.type === "image") w.pickImage("", modelData);
+                                            else w.add(parent.parent.parent.modelData.type, modelData, w.mainScreen);
                                         }
                                     }
                                 }
                             }
                         }
                     }
+                }
+
+                SLabel {
+                    t: pal
+                    visible: root.hub && root.hub.widgets && root.hub.widgets.pickError !== ""
+                    text: root.hub && root.hub.widgets ? root.hub.widgets.pickError : ""
+                    color: pal.danger
+                }
+                SLabel {
+                    t: pal
+                    text: "Image widgets: pick a picture with + S / M / L (needs zenity, kdialog or yad). To change it later, use Edit on Desktop and press Choose Image on the widget."
                 }
 
                 SLabel { t: pal; header: true; text: "Sound" }
@@ -1423,16 +1513,7 @@ Scope {
                             onPicked: i => { if (root.bar) root.bar.barStyle = (i === 1 ? "liquid" : "blur"); }
                         }
                     }
-                    SRow {
-                        t: pal
-                        title: "Liquid Glass bar"
-                        subtitle: "The menu bar strip itself is Liquid Glass, refracting the wallpaper and windows under it (needs Apple Liquid Glass style)"
-                        SSwitch {
-                            t: pal
-                            checked: root.bar ? root.bar.barGlass : true
-                            onToggled: v => { if (root.bar) root.bar.barGlass = v; }
-                        }
-                    }
+
                 }
 
                 SCard {
@@ -1516,21 +1597,7 @@ Scope {
                     }
                 }
 
-                SCard {
-                    t: pal
-                    SRow {
-                        t: pal
-                        title: "Bar background"
-                        subtitle: "Separate translucent background. Use Liquid Glass for wallpaper blur on niri."
-                        SSlider {
-                            t: pal
-                            from: 0; to: 0.6; stepSize: 0.01
-                            value: root.bar ? root.bar.barBgOpacity : 0.10
-                            leftLabel: "Hidden"; rightLabel: "Tinted"
-                            onMoved: v => { if (root.bar) root.bar.barBgOpacity = v; }
-                        }
-                    }
-                }
+
 
                 SCard {
                     t: pal
@@ -2147,12 +2214,11 @@ Scope {
                         title: "Show Dock on"
                         SSegmented {
                             t: pal
-                            model: ["All Displays", "Primary Only"]
+                            model: ["All", "Primary", "Focused"]
                             segWidth: 96
-                            current: root.monitor === "" ? 0 : 1
+                            current: root.monitor === "" ? 0 : (root.monitor === "@focused" ? 2 : 1)
                             onPicked: i => {
-                                if (i === 0) root.monitor = "";
-                                else if (Quickshell.screens.length > 0) root.monitor = Quickshell.screens[0].name;
+                                root.monitor = i === 0 ? "" : (i === 1 ? "@primary" : "@focused");
                             }
                         }
                     }
@@ -2321,27 +2387,18 @@ Scope {
             }
         }
 
-        // ── Bluetooth ──
+        // ── Bluetooth ── (uses the Menu Bar's Bluetooth backend, so pairing, scanning and errors behave like the Control Center)
         Component {
             id: paneBt
             Column {
                 id: btPane
                 spacing: 10
-                property var devs: []
-                function refresh() { if (!btList.running) btList.running = true; }
-                Component.onCompleted: refresh()
-                Timer { interval: 3000; repeat: true; running: prefsWindow.visible; onTriggered: btPane.refresh() }
-                Process {
-                    id: btList
-                    command: ["sh", "-c", "bluetoothctl devices Paired 2>/dev/null | while read -r _ mac name; do c=$(bluetoothctl info \"$mac\" 2>/dev/null | grep -c 'Connected: yes'); b=$(bluetoothctl info \"$mac\" 2>/dev/null | sed -n 's/.*Battery Percentage: 0x[0-9a-fA-F]* (\\([0-9]*\\)).*/\\1/p'); printf '%s\\t%s\\t%s\\t%s\\n' \"$mac\" \"$name\" \"$c\" \"$b\"; done"]
-                    stdout: StdioCollector {
-                        onStreamFinished: {
-                            var out = [], l = text.split("\n");
-                            for (var i = 0; i < l.length; i++) { var f = l[i].split("\t"); if (f.length >= 3 && f[0] !== "") out.push({ mac: f[0], name: f[1], on: f[2] === "1", bat: f[3] || "" }); }
-                            btPane.devs = out;
-                        }
-                    }
-                }
+                readonly property var bar: root.bar
+                readonly property var allDevs: bar ? bar.btDevices : []
+                readonly property var myDevs: allDevs.filter(function (d) { return d.paired || d.connected; })
+                readonly property var nearby: allDevs.filter(function (d) { return !d.paired && !d.connected; })
+                Component.onCompleted: { if (bar) { bar.refreshBt(); bar.scanBt(); } }
+                Timer { interval: 4000; repeat: true; running: prefsWindow.visible; onTriggered: if (btPane.bar) btPane.bar.refreshBt() }
                 SCard {
                     t: pal
                     SRow {
@@ -2350,25 +2407,53 @@ Scope {
                         SSwitch { t: pal; checked: root.bar ? root.bar.btOn : false; onToggled: v => { if (root.bar && root.bar.btOn !== v) root.bar.toggleBt(); } }
                     }
                 }
-                SLabel { t: pal; header: true; text: "My Devices"; visible: btPane.devs.length > 0 }
+                SLabel { t: pal; header: true; text: "My Devices"; visible: btPane.myDevs.length > 0 }
                 SCard {
                     t: pal
-                    visible: btPane.devs.length > 0
+                    visible: btPane.myDevs.length > 0
                     Repeater {
-                        model: btPane.devs
+                        model: btPane.myDevs
                         delegate: SRow {
                             required property var modelData
                             t: pal
                             title: modelData.name
-                            subtitle: (modelData.on ? "Connected" : "Not Connected") + (modelData.bat !== "" ? " · " + modelData.bat + "%" : "")
+                            subtitle: (root.bar && root.bar.btBusy === modelData.mac ? (modelData.connected ? "Disconnecting\u2026" : "Connecting\u2026")
+                                       : (modelData.connected ? "Connected" : "Not Connected")) + (modelData.bat !== "" ? " \u00B7 " + modelData.bat + "%" : "")
                             SButton {
-                                t: pal; text: modelData.on ? "Disconnect" : "Connect"
-                                onClicked: { Quickshell.execDetached(["bluetoothctl", modelData.on ? "disconnect" : "connect", modelData.mac]); btLater.restart(); }
+                                t: pal; text: modelData.connected ? "Disconnect" : "Connect"
+                                enabled: !(root.bar && root.bar.btBusy !== "")
+                                onClicked: { if (root.bar) root.bar.connectBt(modelData.mac, modelData.connected); }
                             }
                         }
                     }
                 }
-                Timer { id: btLater; interval: 2500; onTriggered: btPane.refresh() }
+                SLabel { t: pal; header: true; text: (root.bar && root.bar.btScanning) ? "Nearby Devices \u2014 searching\u2026" : "Nearby Devices"; visible: root.bar && root.bar.btOn }
+                SCard {
+                    t: pal
+                    visible: root.bar && root.bar.btOn
+                    Repeater {
+                        model: btPane.nearby
+                        delegate: SRow {
+                            required property var modelData
+                            t: pal
+                            title: modelData.name
+                            subtitle: root.bar && root.bar.btBusy === modelData.mac ? "Pairing\u2026" : "Not paired"
+                            SButton {
+                                t: pal; text: "Connect"
+                                enabled: !(root.bar && root.bar.btBusy !== "")
+                                onClicked: { if (root.bar) root.bar.connectBt(modelData.mac, false); }
+                            }
+                        }
+                    }
+                    SRow {
+                        t: pal
+                        visible: btPane.nearby.length === 0
+                        title: root.bar && root.bar.btScanning ? "Searching for devices\u2026" : "No new devices found"
+                        subtitle: "Put the device in pairing mode, then scan again"
+                        SButton { t: pal; text: "Scan Again"; enabled: !(root.bar && root.bar.btScanning); onClicked: { if (root.bar) root.bar.scanBt(); } }
+                    }
+                }
+                SLabel { t: pal; text: root.bar ? root.bar.btError : ""; visible: root.bar && root.bar.btError !== "" }
             }
         }
 
@@ -2595,7 +2680,7 @@ Scope {
                     visible: root.monList.length > 1
                     SRow {
                         t: pal; title: "Main display"
-                        subtitle: "The Dock, the lock screen controls and new widgets go here"
+                        subtitle: "Default destination for new widgets; the Dock has its own placement setting"
                         SSegmented {
                             t: pal
                             model: root.monList.map(function (m) { return m.name; })
@@ -2676,6 +2761,23 @@ Scope {
                                 }
                             }
                         }
+                        SRow {
+                            t: pal; title: "Scale"
+                            SPopUp {
+                                t: pal; model: ["100%", "125%", "150%", "175%", "200%", "250%", "300%"]
+                                current: [1, 1.25, 1.5, 1.75, 2, 2.5, 3].indexOf(monCard.modelData.scale)
+                                onPicked: i => root.tryDisplay(monCard.modelData.name, {scale: [1, 1.25, 1.5, 1.75, 2, 2.5, 3][i]})
+                            }
+                        }
+                        SRow {
+                            t: pal; title: "Position"; visible: root.monList.length > 1
+                            subtitle: "Relative to the main display, or the next connected display"
+                            SPopUp {
+                                t: pal; model: ["Left", "Right", "Above", "Below"]; current: -1
+                                onPicked: i => root.arrangeDisplay(monCard.modelData.name, i)
+                            }
+                        }
+
                     }
                 }
             }
@@ -2967,7 +3069,7 @@ Scope {
                         onClicked: {
                             var b = root.bar;
                             var cfg = JSON.stringify({ f: b.lockClockFont, w: b.lockClockWeight, m: b.lockClockMaterial, i: b.lockClockIntensity, c: b.lockClockTint, t: b.lockClockTall, d: b.lockClockDate });
-                            Quickshell.execDetached(["env", "MACLOCK_PREVIEW=1", "MACLOCK_CLOCK=" + cfg, "timeout", "6", Quickshell.env("HOME") + "/.local/bin/macshell-lock"]);
+                            Quickshell.execDetached(["env", "MACLOCK_PREVIEW=1", "MACLOCK_PREVIEW_AUTO_CLOSE=1", "MACLOCK_CLOCK=" + cfg, "timeout", "30", Quickshell.env("HOME") + "/.local/bin/macshell-lock"]);
                         }
                     }
                     SButton { t: pal; text: "Lock Screen Now"; onClicked: { prefsWindow.visible = false; Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/macshell-lock"]); } }
@@ -3231,8 +3333,7 @@ Scope {
                             Item {
                                 id: wtBox
                                 width: parent.width; height: parent.height - 22
-                                scale: wtMa.pressed ? 0.96 : (wtMa.containsMouse ? 1.025 : 1)
-                                Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutBack; easing.overshoot: 1.6 } }
+                                scale: wtMa.pressed ? 0.98 : 1
                                 Item {
                                     id: wtMask
                                     anchors.fill: parent; visible: false
@@ -3345,7 +3446,7 @@ Scope {
                             y: 138
                             width: parent.width
                             horizontalAlignment: Text.AlignHCenter
-                            text: "Version 2 \u2022 niri \u2022 Quickshell"
+                            text: "Version 0.0.7 \u2022 niri \u2022 Quickshell"
                             color: pal.text2
                             font.family: pal.fam
                             font.pixelSize: 12
@@ -3468,10 +3569,10 @@ Scope {
                     t: pal
                     Repeater {
                         model: [
-                            { img: "assets/credits/vsoultann.png", name: "vSuol", gh: "vsoultann",
-                              role: "MacShell Tahoe edition — the lock screen, widgets, Clock, Settings, and every bug you will ever find" },
                             { img: "assets/credits/0-ss.jpg", name: "Rickky", gh: "0-ss",
-                              role: "Original MacShell — the menu bar, the Dock and the Liquid Glass. The one who actually knew what he was doing" }
+                              role: "Owner — the menu bar, the Dock, the Liquid Glass and the widgets. The one who actually knew what he was doing" },
+                            { img: "assets/credits/vsoultann.png", name: "vSuol", gh: "vsoultann",
+                              role: "Collaborator — improved the Settings app and window, and every bug you will ever find" }
                         ]
                         delegate: Item {
                             id: cr
@@ -3599,14 +3700,30 @@ Scope {
     property string lastSig: ""
 
     // ───────────── LOGIC ─────────────
-    function openPrefs(pane) {
+    function openPrefs(pane, screenName) {
         if (!root.settingsEnabled) return;
         if (pane !== undefined && pane !== "") {
             for (var i = 0; i < prefsWindow.panes.length; i++)
                 if (prefsWindow.panes[i].id === pane) { prefsWindow.go(i); break; }
         }
-        prefsWindow.visible = true;
-        prefsWindow.requestActivate();
+        var name = screenName || (hub && hub.compositor.focusedMonitor ? hub.compositor.focusedMonitor.name : mainDisplay);
+        if (!prefsWindow.visible && bar && bar.liquidActive && !sceneGlass) {
+            prefsCaptureScreen = name; prefsSceneUrl = "";
+            bar.captureScene(name); prefsRevealTimer.restart(); return;
+        }
+        revealPrefs();
+    }
+    function revealPrefs() { prefsWindow.visible = true; prefsWindow.requestActivate(); }
+    property string prefsSceneUrl: ""
+    property string prefsCaptureScreen: ""
+    Timer { id: prefsRevealTimer; interval: 1600; onTriggered: root.revealPrefs() }
+    Connections {
+        target: root.bar
+        function onSceneCaptured(screenName, imageUrl) {
+            if (prefsRevealTimer.running && root.prefsCaptureScreen === screenName) {
+                root.prefsSceneUrl = imageUrl; prefsRevealTimer.stop(); root.revealPrefs();
+            }
+        }
     }
 
     function resetPins() {
@@ -3625,17 +3742,17 @@ Scope {
             bar.kbRepeatRate = 35; bar.kbRepeatDelay = 250; bar.mouseSens = 0; bar.mouseNatural = false;
             bar.tpNatural = true; bar.tpTap = true; bar.tpDwt = true; bar.tpScroll = 0.7;
         }
-        if (hub && hub.widgets) { hub.widgets.style = "glass"; hub.widgets.glassAmt = 0.5; hub.widgets.blurAmt = 0.5; hub.widgets.enabled = true; }
+        if (hub && hub.widgets) { hub.widgets.style = "glass"; hub.widgets.glassAmt = 0.5; hub.widgets.blurAmt = 0.5; hub.widgets.enabled = true;  hub.widgets.widgetScale = 1.0; }
         Quickshell.execDetached(["sh", "-c", "rm -f \"$HOME/.config/maclock/settings.json\""]);
         iconSize = 52; magnification = 1.7; magnificationEnabled = true;
-        spacing = 6; margin = 6; cornerRadius = 18;
+        spacing = 6; margin = 6; cornerRadius = 22;
         darkMode = true; glassOpacity = 0.42; glassBlur = 5; glassLiquid = 1.0; dockStyle = "liquid"; accent = "#0a84ff"; fontFamily = "Inter";
         hideMode = "smart"; hideDelay = 450; monitor = "";
         showTrash = true; showLabels = true; showIndicators = true; bounceOnLaunch = true; showThumbs = true;
     }
 
     // ── settings persistence (~/.config/macdock/settings.json) ──
-    readonly property string settingsSig: [dockEnabled, iconSize, magnification, magnificationEnabled, spacing, margin,
+    readonly property string settingsSig: [sceneGlass, dockEnabled, iconSize, magnification, magnificationEnabled, spacing, margin,
         cornerRadius, darkMode, glassOpacity, glassBlur, glassLiquid, dockStyle, wallpaperPath, String(accent), fontFamily, hideMode, hideDelay, monitor,
         showTrash, showLabels, showIndicators, bounceOnLaunch, showThumbs, windowCapture].join("|")
     property bool settingsReady: false
@@ -3646,7 +3763,7 @@ Scope {
 
     function saveSettings() {
         var o = {
-            dockEnabled: dockEnabled, iconSize: iconSize, magnification: magnification, magnificationEnabled: magnificationEnabled,
+            referenceAppearanceVersion: 1, liveBackdropVersion: 1, sceneGlass: sceneGlass, dockEnabled: dockEnabled, iconSize: iconSize, magnification: magnification, magnificationEnabled: magnificationEnabled,
             spacing: spacing, margin: margin, cornerRadius: cornerRadius,
             darkMode: darkMode, glassOpacity: glassOpacity, dockStyle: dockStyle, wallpaperPath: wallpaperPath, glassDebug: glassDebug,
             glassRim: glassRim, glassGrain: glassGrain, glassLiquid: glassLiquid, glassBlur: glassBlur,
@@ -3660,13 +3777,18 @@ Scope {
 
     function applySettings(o) {
         if (!o || typeof o !== "object") return;
-        var keys = ["dockEnabled", "iconSize", "magnification", "magnificationEnabled", "spacing", "margin", "cornerRadius",
+        var keys = ["sceneGlass", "dockEnabled", "iconSize", "magnification", "magnificationEnabled", "spacing", "margin", "cornerRadius",
                     "darkMode", "glassOpacity", "dockStyle", "wallpaperPath", "glassDebug", "glassRim", "glassGrain", "glassLiquid", "glassBlur", "accent", "fontFamily", "hideMode", "hideDelay", "monitor",
                     "showTrash", "showLabels", "showIndicators", "bounceOnLaunch", "showThumbs"];
         for (var i = 0; i < keys.length; i++) {
             if (o[keys[i]] === undefined) continue;
             try { root[keys[i]] = o[keys[i]]; } catch (err) { }
         }
+        // Migrate the old wallpaper material once on the private compositor.
+        // Later explicit material choices are preserved by the version marker.
+        if (o.liveBackdropVersion !== 1 && Quickshell.env("MACSHELL_REAL_GLASS") === "1") root.sceneGlass = true;
+        // The old port used 18px; the reference appearance uses a softer 22px corner.
+        if (o.referenceAppearanceVersion !== 1 && root.cornerRadius === 18) root.cornerRadius = 22;
     }
 
     FileView {
@@ -3674,8 +3796,14 @@ Scope {
         path: root.configDir + "/settings.json"
         printErrors: false
         onLoaded: {
-            try { root.applySettings(JSON.parse(text())); } catch (err) { }
+            var migrated = false;
+            try {
+                var saved = JSON.parse(text());
+                migrated = saved.liveBackdropVersion !== 1 && Quickshell.env("MACSHELL_REAL_GLASS") === "1";
+                root.applySettings(saved);
+            } catch (err) { }
             root.settingsReady = true;
+            if (migrated) saveTimer.restart();
             if (root.dockStyle === "liquid") root.startGlass();
         }
         onLoadFailed: {
@@ -3790,7 +3918,7 @@ Scope {
         return out;
     }
 
-    function activate(item, forceNew) {
+    function activate(item, forceNew, screenName) {
         if (item.kind === "win") { if (item.tl) item.tl.activate(); return; }
         if (item.special === "trash") {
             // the file manager first (Dolphin understands trash:/ natively); xdg-open only as the last resort
@@ -3808,7 +3936,7 @@ Scope {
             return;
         }
         if ((item.appId || item.key) === "macshell-clock") { root.hub.clock.open(); return; }
-        if ((item.appId || item.key) === "macshell-settings") { root.openPrefs(); return; }
+        if ((item.appId || item.key) === "macshell-settings") { root.openPrefs(undefined, screenName); return; }
         if (item.entry || item.key) {
             var L = {};
             for (var k in launching) L[k] = launching[k];
@@ -3959,7 +4087,7 @@ Scope {
 
         // window previews: one cell per open window, in their own section next to the Trash
         var winItems = [], liveWins = [];
-        if (showThumbs) {
+        if (showThumbs && root.hub.windowCapture) {
             for (var w = 0; w < tls.length; w++) {
                 var tl = tls[w];
                 if (!tl.appId || tl.title === "macshell Settings") continue;
@@ -4050,9 +4178,11 @@ Scope {
     // ═════════════ LIQUID GLASS BACKEND ═════════════
     // glassState: "idle" → "building" (qsb running) → "ready" | "failed". "failed" falls back to Normal Blur.
     property string glassState: "idle"
+    property bool sceneGlass: Quickshell.env("MACSHELL_REAL_GLASS") === "1"
+    onSceneGlassChanged: { glassState = "idle"; startGlass(); }
     readonly property bool liquidActive: dockStyle === "liquid" && glassState === "ready" && !(bar && bar.gaming)
-    readonly property string glassShaderSrc: decodeURIComponent(Qt.resolvedUrl("liquidglass-niri.frag").toString().replace("file://", ""))
-    readonly property string glassShaderOut: configDir + "/liquidglass-niri.frag.qsb"
+    readonly property string glassShaderSrc: decodeURIComponent(Qt.resolvedUrl(root.sceneGlass ? "liquidglass-niri.frag" : "liquidglass.frag").toString().replace("file://", ""))
+    readonly property string glassShaderOut: configDir + (root.sceneGlass ? "/liquidglass-niri.frag.qsb" : "/liquidglass.frag.qsb")
     readonly property url glassShaderUrl: "file://" + glassShaderOut
 
     onDockStyleChanged: if (dockStyle === "liquid") startGlass()
@@ -4171,7 +4301,7 @@ Scope {
             id: win
             required property var modelData
             screen: modelData
-            visible: root.monitor === "" || modelData.name === root.monitor
+            visible: root.effectiveMonitor === "" || modelData.name === root.effectiveMonitor
 
             anchors { left: true; right: true; bottom: true }
             implicitHeight: root.windowHeight
@@ -4640,7 +4770,7 @@ Scope {
 
                 Item {
                     id: dock
-                    NiriBlurPane { target: dock; radius: root.cornerRadius }
+                    NiriBlurPane { enabled: root.sceneGlass; target: dock; radius: root.cornerRadius }
                     width: row.width + root.hPad * 2
                     height: root.bgHeight
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -4731,7 +4861,7 @@ Scope {
                                 property real dispersion: 0.06 * root.glassLiquid
                                 property real magnify: 0.08 * root.glassLiquid
                                 property real rim: root.glassRim
-                                property real grain: root.glassGrain
+                                property real grain: 0 // Smooth Dock: no decorative grain.
                                 property real blurPx: 1.5            // tiny residual smoothing; the real blur is the MultiEffect pre-pass
                                 property real tintMix: root.glassOpacity * 0.55
                                 property real saturation: 1.25
@@ -5010,7 +5140,7 @@ Scope {
                                             ui.menuModel = root.menuFor(cell.modelData);
                                             ui.menuItem = cell.modelData;
                                         } else {
-                                            root.activate(cell.modelData, mouse.button === Qt.MiddleButton);
+                                            root.activate(cell.modelData, mouse.button === Qt.MiddleButton, win.modelData.name);
                                         }
                                     }
                                 }

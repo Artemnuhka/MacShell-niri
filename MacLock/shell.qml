@@ -8,6 +8,7 @@
 // relaunches this one if it dies (Hyprland's misc:allow_session_lock_restore lets the new instance take over).
 // Password check: PAM, /etc/pam.d/hyprlock (same stack hyprlock uses).
 import QtQuick
+import "DisplayState.js" as Displays
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -38,7 +39,10 @@ ShellRoot {
     // the monitor that was focused when the lock started gets the full layout
     property string primary: ""
     function pickPrimary() {
-        if (primary === "" && niri.focusedMonitor) primary = niri.focusedMonitor.name;
+        var names = Quickshell.screens.map(function(s) { return s.name; });
+        if (names.indexOf(primary) >= 0) return;
+        var focused = niri.focusedMonitor ? niri.focusedMonitor.name : "";
+        primary = names.indexOf(focused) >= 0 ? focused : Displays.primary(Quickshell.screens, "", focused);
     }
     Component.onCompleted: pickPrimary()
     // Hyprland's state arrives a moment after startup; only fall back to the first screen if it never does
@@ -46,6 +50,7 @@ ShellRoot {
         interval: 400; running: true
         onTriggered: if (root.primary === "" && Quickshell.screens.length > 0) root.primary = Quickshell.screens[0].name
     }
+    Connections { target: Quickshell; function onScreensChanged() { root.pickPrimary(); } }
     Connections { target: niri; function onChanged() { root.pickPrimary(); } }
 
     QtObject {
@@ -232,6 +237,9 @@ ShellRoot {
             }
         }
     }
+
+    // Start the preview countdown after QML has loaded, not during process startup.
+    Timer { interval: 6000; running: root.preview && Quickshell.env("MACLOCK_PREVIEW_AUTO_CLOSE") === "1"; onTriggered: Qt.quit() }
 
     // ═════════════ preview window ═════════════
     Variants {

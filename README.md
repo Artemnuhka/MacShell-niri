@@ -28,8 +28,15 @@ A native niri backend, an openSUSE installer and a dedicated session with scene 
 
 | Settings | Lock Screen |
 | :---: | :---: |
-| ![Frosted settings and clock styles](docs/media/settings.png) | ![MacLock visual preview](docs/media/lock-screen.png) |
+| ![Frosted settings and clock styles](docs/media/settings.png) | ![MacLock visual preview with media playback](docs/media/lock-screen.gif) |
 | Frosted surfaces, rounded corners and five clock styles | Visual preview; actual session locking uses PAM |
+
+| Spotlight · Apple Emoji | Music · MPRIS |
+| :---: | :---: |
+| ![Apple Color Emoji in Spotlight](docs/media/spotlight.png) | ![Pause, track change and seek](docs/media/music.gif) |
+
+Fresh captures from the openSUSE VM on October 18. Playback uses a local test tone;
+MacLock is shown in preview mode. [Validation details and limits](docs/VALIDATION.md).
 
 <details>
 <summary>Desktop and appearance</summary>
@@ -37,6 +44,8 @@ A native niri backend, an openSUSE installer and a dedicated session with scene 
 ![Desktop widgets](docs/media/desktop.png)
 
 ![Appearance settings](docs/media/appearance.png)
+
+![Per-output display settings](docs/media/displays.png)
 
 The screenshots use Tahoe Beach Dusk, selected separately in the test session. Full-resolution Apple wallpapers are not bundled or downloaded by the installer.
 
@@ -46,12 +55,12 @@ The screenshots use Tahoe Beach Dusk, selected separately in the test session. F
 
 - **Menu bar and Dock:** application menus, workspaces, system tray, notifications, MPRIS media controls, application icons and a logo matching your distribution.
 - **Control Center:** Wi-Fi, Bluetooth, volume, brightness, Focus and customizable controls. Tile entrance animations can be disabled.
-- **Liquid Glass:** in the dedicated niri-glass session, lenses refract the scene beneath panels, including application windows. Settings use a denser frosted material.
+- **Liquid Glass:** original MacShell shaders and rounded widgets; popovers refract a desktop snapshot, including windows. The private glass session enables experimental live scene refraction behind Dock and Spotlight by default. Settings use a denser frosted material.
 - **Widgets:** clock, calendar, weather, batteries, music, notes, photos, reminders, stocks and timer/alarms; S/M/L sizes and four materials.
 - **Settings:** appearance, menu bar, Dock, widgets, wallpapers and MacLock. Clock fonts are bundled.
 - **Spotlight and Alt+Tab:** application and window search, clipboard history, emoji and application switching.
 - **MacLock:** a separate PAM-enabled locker with media controls and customizable clocks.
-- **Tahoe Dark + Bibata Modern Classic at 20 px** on a fresh installation. A VirtualBox-specific kitty launcher works around virtual GPU artifacts.
+- **Tahoe Dark + Bibata Modern Classic at 20 px** in the separate session, preserving shared desktop preferences. VirtualBox-specific terminal launchers work around virtual GPU limits. Ghostty, when already installed, gets a user-local launcher using Mesa software OpenGL only in VirtualBox niri sessions; the menu entry uses the same launcher.
 
 This port preserves and adapts the existing MacShell components. See [PORT-PROVENANCE.md](PORT-PROVENANCE.md) for source revisions and attribution.
 
@@ -66,7 +75,15 @@ cd MacShell-niri
 ./install.sh
 ```
 
-On openSUSE, the default installation sets up dependencies, the user shell, theme, cursor, configuration and a separate **MacShell Liquid Glass (username)** entry in your login manager. Log out and select that entry after installation. The installer does not start the session itself.
+On openSUSE, the default installation adds dependencies, user-local MacShell assets and a separate **MacShell Liquid Glass (username)** login entry. It creates `~/.config/niri/macshell.kdl` from your existing niri config (or the starter template), and a separate `macshell-glass.kdl` for refraction. Your original `niri/config.kdl` stays unchanged. Log out and choose MacShell when ready; installation does not switch or stop your current session.
+
+### Keep Plasma and your configuration
+
+By default, Plasma/KWin settings, shared GTK3/GTK4 CSS/preferences, Qt preferences, kitty settings and the original niri config are preserved. Themes/icons/cursors are installed as assets; MacShell selects its icon theme and passes the GTK theme to its own process tree. It does not change SDDM autologin, the default desktop, system graphics drivers or Plasma services.
+
+**To return to KDE Plasma: log out and select Plasma in your login manager. No uninstall is needed.** Use `~/.local/bin/macshell-niri-session` for the separate stock-niri session, or `macshell-glass-session` for refraction. Never launch a second compositor inside your current desktop terminal.
+
+Global appearance changes require explicit `--global-appearance`; editing the original niri config requires explicit `--integrate-config`. These options are unnecessary for the normal separate-session installation.
 
 **The first installation may need to build Quickshell and niri-glass.** Builds run at low priority with one job; duration depends on your CPU and connection. Subsequent installations reuse suitable private builds. These live in your user directory and do not replace the system niri binary.
 
@@ -83,15 +100,17 @@ Starting another compositor from a terminal inside your current desktop creates 
 
 ```sh
 ./install.sh --no-glass                   # stock niri, without optical refraction
-./install.sh --theme keep --cursor keep  # keep your current appearance
+./install.sh --theme keep --cursor keep --icons keep  # skip MacShell appearance assets/preferences
 ./install.sh --theme tahoe-light         # light theme
 ./install.sh --no-login-session          # TTY launcher only, no login-manager entry
 ./install.sh --skip-deps                 # dependencies and private compositor are ready
 ./install.sh --no-extras                 # skip optional utilities
 ./install.sh --no-clock-fonts            # skip bundled clock fonts
-./install.sh --no-config                 # do not edit the niri configuration
+./install.sh --no-config                 # shell payload only; no private compositor config
 ./install.sh --keep-xwayland-config      # configure Xwayland manually
-./install.sh --niri-config /path/config.kdl
+./install.sh --niri-config /path/config.kdl  # seed copied into adjacent macshell.kdl
+./install.sh --global-appearance         # opt in to shared GTK/Qt/kitty appearance changes
+./install.sh --integrate-config          # opt in to editing the original niri config
 ```
 
 To update:
@@ -186,13 +205,14 @@ Tested in **VirtualBox on openSUSE Tumbleweed 20261014**, with niri 26.04, xwayl
 ./install.sh --uninstall     # remove the shell, its bindings and managed login entry
 ```
 
-Settings, backups, dependencies and private builds are retained. To fully undo Xwayland migration, restore the appropriate niri configuration backup. Widgets are stored in `~/.config/macshell/widgets.json`, clock settings in `~/.config/macshell/clock.json`, and menu bar/Dock settings in `~/.config/macbar` and `~/.config/macdock`.
+Settings, recovery backups, dependencies, fonts/themes and private builds are retained. Unchanged managed launchers/configs are removed using a checksum manifest; edited files are preserved, and modified shell payloads are backed up. Identical reinstalls do not create extra launcher/payload backups. Default Xwayland changes are confined to private configs; if you explicitly used `--integrate-config`, restore its backup to undo that migration. Widgets are stored in `~/.config/macshell/widgets.json`, clock settings in `~/.config/macshell/clock.json`, and menu bar/Dock settings in `~/.config/macbar` and `~/.config/macdock`.
 
 ## Checks
 
 ```sh
 python3 -m unittest discover -s tests -v
 node tests/niri-state.test.cjs
+node tests/display-state.test.cjs
 ```
 
 CI checks the installer and migrations, niri event reducer, Python/shell syntax and QML parsing. Automated checks do not replace graphical testing. Test GUI applications, temporary recordings, logs and VM access keys are not included in the public tree.
@@ -206,3 +226,65 @@ CI checks the installer and migrations, niri event reducer, Python/shell syntax 
 - Bundled clock fonts — SIL Open Font License; licenses and pinned SHA-256 hashes are in `vendor/clock-fonts`.
 
 Third-party licenses and pinned versions are in `vendor/`. The root [LICENSE](LICENSE) covers MacShell's MIT code and does not replace third-party licenses. Original documentation: [README.upstream.md](README.upstream.md).
+
+## October 18 upstream refresh
+
+Imported 0-ss/MacShell `831548c`. The default material now uses the original MacShell shader and
+original clock/calendar/weather/player components, with a transparent menu bar and a smooth 22px
+Dock. Extra Tahoe widgets remain available. Image widgets copy a selected picture into private
+storage; Widget size scales widgets and the grid from 60% to 150%. Bluetooth scanning, pairing,
+device state and errors are shared by the menu, Control Center and Settings.
+
+The private niri compositor supplies live scene refraction behind the Dock and Spotlight. This
+experimental path is enabled by default in the private glass session; older wallpaper-backed settings
+are migrated once, while later explicit material choices are preserved. The original wallpaper
+material remains available in Appearance. Per-window thumbnails remain unavailable.
+
+Update commands (always target this niri fork):
+
+```sh
+macshell-niri-update check
+macshell-niri-update log
+macshell-niri-update update
+macshell-niri-update rollback
+macshell-niri-update channel main  # or release
+```
+
+The launcher prevents duplicate shells in one niri session and restarts after a crash. Updates preserve
+settings and back up the previous shell together with MacLock. No automatic update timer is enabled.
+
+Super + 1…9 switches to a workspace by position; the menu bar shows only active or occupied
+workspaces, in position order, without precreating nine named workspaces. The bundled
+MacOS-Like icon themes are the set recommended by the original repository. The installer
+selects the dark variant by default; use `--icons macos-like-light` or `--icons keep`.
+The font remains Inter; SF Pro is not bundled.
+
+### Multiple displays, NVIDIA and emoji
+
+The Dock can appear on all displays, the chosen primary display, or the focused display.
+Disconnecting its selected output moves it to an available display. Widgets keep their saved
+connector and coordinates: unplugged-display widgets remain accessible on a connected display,
+then return when it reconnects. Edit mode offers **Next display**. Displays settings support
+per-output resolution, refresh, fractional scale and relative position, with a 15-second rollback.
+Saved settings are restored when the output reconnects. Qt and niri use logical coordinates
+for mixed DPI, portrait outputs and negative desktop positions.
+
+On NVIDIA hardware the installer adds an isolated user application profile for both `niri`
+and `niri-glass`, limiting the driver's free VRAM buffer pool as recommended by niri. The private
+session launcher checks it before starting the compositor. Existing driver profiles, PRIME
+selection, boot parameters and driver packages are preserved. `macshell-niri-doctor` reports
+GPU drivers, NVIDIA DRM modesetting and inherited rendering overrides. A recent GBM-capable
+NVIDIA driver and DRM modesetting remain prerequisites; driver installation is distribution-specific.
+References: [niri NVIDIA guide](https://niri-wm.github.io/niri/Nvidia.html),
+[NVIDIA profile search paths](https://download.nvidia.com/XFree86/Linux-x86_64/570.124.04/README/profiles.html).
+Physical NVIDIA and multi-monitor hotplug still need hardware validation; automated layout
+checks cover three displays, mixed scaling and reconnect, and the GUI was checked in VirtualBox.
+
+Spotlight prefers **Apple Color Emoji** when installed, including category icons and the emoji grid.
+An optional user-local install is available with `macshell-niri-emoji install-apple`; it downloads
+the pinned Linux font build from [apple-emoji-ttf](https://github.com/samuelngs/apple-emoji-ttf)
+and verifies SHA-256. The font artwork is not bundled or relicensed by this fork. It changes
+Spotlight's chosen emoji family without overriding system font aliases; restart MacShell after
+installing. Other colour emoji fonts remain the fallback. The text UI font remains Inter.
+
+Settings and Alt+Tab also capture the scene before opening, including application windows. Each Qt window owns its texture; the background remains still while open.

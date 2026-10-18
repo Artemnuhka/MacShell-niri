@@ -208,6 +208,14 @@ def configure(path, launcher, fix_xwayland=True, remove=False, validator="niri",
     if not existed:
         original = original.replace('spawn "macshell-niri"', 'spawn ' + json.dumps(str(launcher)))
     text = managed(original)
+    anchor = '// MACSHELL_INTERNAL_INSERTION_POINT'
+    if not remove and BEGIN in original:
+        # Keep our block in place: moving it past theme/cursor blocks on each
+        # reinstall otherwise produces unnecessary configuration backups.
+        if anchor in original:
+            raise ValueError('Reserved installer insertion marker in configuration')
+        a, b = original.index(BEGIN), original.index(END) + len(END)
+        text = managed(original[:a] + anchor + original[b:])
     if remove:
         text = text.replace('Mod+Return { spawn ' + json.dumps(str(launcher.parent / 'macshell-terminal')) + '; }',
                             'Mod+Return { spawn "kitty"; }')
@@ -228,7 +236,10 @@ def configure(path, launcher, fix_xwayland=True, remove=False, validator="niri",
                   '    background-effect { xray false; }',
                   '}']
         block += [END]
-        text = text.rstrip() + '\n\n' + '\n'.join(block) + '\n'
+        if anchor in text:
+            text = text.replace(anchor, '\n'.join(block))
+        else:
+            text = text.rstrip() + '\n\n' + '\n'.join(block) + '\n'
     if text == original:
         return
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')

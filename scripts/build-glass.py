@@ -7,6 +7,7 @@ The third-party install scripts are deliberately not executed.
 import importlib.util
 import json
 import os
+import sys
 from pathlib import Path
 import shutil
 import subprocess
@@ -65,16 +66,23 @@ def login_session(installer, data, bindir, dry=False):
         f'Name=MacShell Liquid Glass ({pwd.getpwuid(os.getuid()).pw_name})\n' +
         'Comment=MacShell with live scene refraction on niri\n' +
         f'Exec="{escaped}"\nDesktopNames=niri;\nX-MacShell-Owner={os.getuid()}\n')
-    installer.run(['sudo', 'install', '-D', '-m', '0644', staged, destination])
+    if not destination.exists() or destination.read_text() != staged.read_text():
+        installer.run(['sudo', 'install', '-D', '-m', '0644', staged, destination])
     print('At the next login, select MacShell Liquid Glass. No session is started by this installer.')
 
 
-def remove_login_session(installer):
+def remove_login_session(installer, data, bindir):
     path = session_path()
-    if path.exists():
-        if f'X-MacShell-Owner={os.getuid()}\n' not in path.read_text():
-            raise RuntimeError(f'Refusing to remove an unmanaged session: {path}')
-        installer.run(['sudo', 'rm', '--', path])
+    staged = data / 'macshell-niri/login-session.desktop'
+    if not path.exists() or not staged.is_file():
+        return
+    expected = str(bindir / 'macshell-glass-session')
+    text = path.read_text()
+    if f'X-MacShell-Owner={os.getuid()}\n' not in text or text != staged.read_text() or expected not in text:
+        print(f'Kept login session belonging to another installation or modified by the user: {path}')
+        return
+    installer.run(['sudo', 'rm', '--', path])
+    staged.unlink()
 
 
 def pinned_checkout(installer, repo, revision, path, dry):
@@ -162,21 +170,21 @@ def session(installer, data, config, bindir, niri_config, binary, dry=False):
     try:
         candidate.write_text(text)
         installer.run([binary, 'validate', '--config', candidate])
-        installer.backup(private_config)
-        candidate.replace(private_config)
+        if not private_config.exists() or private_config.read_text() != text:
+            installer.backup(private_config)
+            candidate.replace(private_config)
     finally:
         candidate.unlink(missing_ok=True)
     bindir.mkdir(parents=True, exist_ok=True)
-    installer.backup(wrapper)
-    wrapper.write_text('#!/bin/sh\nset -eu\n' +
+    installer.write_managed_file(wrapper, '#!/bin/sh\nset -eu\n' +
         'if [ "$(id -u)" != ' + shlex.quote(str(os.getuid())) + ' ]; then\n' +
         '    echo "This MacShell session belongs to another user." >&2; exit 1\nfi\n' +
         'if [ -n "${WAYLAND_DISPLAY:-}" ] || [ -n "${DISPLAY:-}" ]; then\n' +
         '    echo "Start macshell-glass-session from a text TTY, outside a graphical session." >&2\n' +
         '    exit 1\nfi\nexport MACSHELL_REAL_GLASS=1\n' +
         'export MACSHELL_GLASS_CONFIG=' + shlex.quote(str(private_config)) + '\n' +
-        'export MACSHELL_GLASS_BINARY=' + shlex.quote(str(binary)) + '\nexec ' +
+        'export MACSHELL_GLASS_BINARY=' + shlex.quote(str(binary)) + '\n' +
+        shlex.quote(sys.executable) + ' ' + shlex.quote(str(config / 'quickshell/macshell-niri/scripts/graphics.py')) + ' configure\nexec ' +
         shlex.quote(str(binary)) + ' --session --config ' + shlex.quote(str(private_config)) + ' "$@"\n')
-    wrapper.chmod(0o755)
     print(f'Real refraction session: {wrapper}')
     print('Log out before starting this session. The TTY launcher is also available.')
