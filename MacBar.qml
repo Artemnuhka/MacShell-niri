@@ -4417,13 +4417,13 @@ Scope {
                             }
                             Rectangle {
                                 anchors.centerIn: parent
-                                width: 22; height: 17; radius: 3
+                                width: 19; height: 20; radius: 3.5
                                 color: bpal.fg
                                 Text {
                                     anchors.centerIn: parent
-                                    text: root.keyboardLayout === "US" ? "A" : (root.keyboardLayout === "RU" ? "РУ" : root.keyboardLayout)
+                                    text: root.keyboardLayout === "RU" ? "РУ" : root.keyboardLayout
                                     color: bpal.dark ? "#151515" : "white"
-                                    font.family: bpal.fam; font.pixelSize: root.keyboardLayout === "US" ? 12 : 9; font.weight: Font.DemiBold
+                                    font.family: bpal.fam; font.pixelSize: 10.5; font.weight: Font.DemiBold; font.letterSpacing: -0.35
                                 }
                             }
                             MouseArea {
