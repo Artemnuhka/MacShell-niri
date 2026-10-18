@@ -55,7 +55,9 @@ The screenshots use Tahoe Beach Dusk, selected separately in the test session. F
 - **Liquid Glass:** original MacShell shaders and rounded widgets; popovers refract a desktop snapshot, including windows. The private glass session enables experimental live scene refraction behind Dock and Spotlight by default. Settings use a denser frosted material.
 - **Widgets:** clock, calendar, weather, batteries, music, notes, photos, reminders, stocks and timer/alarms; S/M/L sizes and four materials.
 - **Settings:** appearance, menu bar, Dock, widgets, wallpapers and MacLock. Clock fonts are bundled.
-- **Spotlight and Alt+Tab:** application and window search, clipboard history, emoji and application switching.
+- **Spotlight and Alt+Tab:** application and window search, clipboard history, emoji and application switching. Right-click an application to open it or keep/remove it in the Dock without dismissing Spotlight.
+- **Input Sources:** add/remove XKB layouts and variants in Settings → Keyboard, choose the switching shortcut and select the active source from the menu-bar badge.
+- **Desktop portals:** GTK for appearance and file dialogs, WLR for screenshots and GNOME for screen sharing. Portal services follow the niri session lifetime; the appearance preference follows MacShell’s Light/Dark setting. Plasma portal routing is preserved.
 - **MacLock:** a separate PAM-enabled locker with media controls and customizable clocks.
 - **Tahoe Dark + Bibata Modern Classic at 20 px** in the separate session, preserving shared desktop preferences. VirtualBox-specific terminal launchers work around virtual GPU limits. Ghostty, when already installed, gets a user-local launcher using Mesa software OpenGL only in VirtualBox niri sessions; the menu entry uses the same launcher.
 
@@ -79,6 +81,11 @@ On openSUSE, the default installation adds dependencies, user-local MacShell ass
 By default, Plasma/KWin settings, shared GTK3/GTK4 CSS/preferences, Qt preferences, kitty settings and the original niri config are preserved. Themes/icons/cursors are installed as assets; MacShell selects its icon theme and passes the GTK theme to its own process tree. It does not change SDDM autologin, the default desktop, system graphics drivers or Plasma services.
 
 **To return to KDE Plasma: log out and select Plasma in your login manager. No uninstall is needed.** Use `~/.local/bin/macshell-niri-session` for the separate stock-niri session, or `macshell-glass-session` for refraction. Never launch a second compositor inside your current desktop terminal.
+
+MacShell publishes its Light/Dark preference through the portal’s `color-scheme` setting.
+This updates that GNOME appearance preference at runtime; GTK CSS, Plasma colours and
+Plasma’s portal selection are preserved. See [niri’s portal setup](https://niri-wm.github.io/niri/Important-Software.html)
+and the [WLR screenshot backend](https://github.com/emersion/xdg-desktop-portal-wlr).
 
 Global appearance changes require explicit `--global-appearance`; editing the original niri config requires explicit `--integrate-config`. These options are unnecessary for the normal separate-session installation.
 

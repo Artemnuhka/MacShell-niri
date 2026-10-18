@@ -50,5 +50,9 @@ def restore_wallpaper():
 
 
 if __name__ == '__main__':
+    try:
+        subprocess.run([__import__('sys').executable, str(Path(__file__).with_name('portals.py')), 'ensure'], check=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as error:
+        print('MacShell portal startup failed:', error, file=__import__('sys').stderr)
     start_audio()
     restore_wallpaper()

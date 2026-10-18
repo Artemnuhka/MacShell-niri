@@ -94,7 +94,7 @@ Scope {
     }
 
     property real glassBlur: 5
-    // ── Keyboard / Mouse / Trackpad (Settings): applied live to Hyprland with `hyprctl eval`, remembered here ──
+    // ── Keyboard / Mouse / Trackpad: validated private niri configuration, applied live ──
     property int kbRepeatRate: 35
     property int kbRepeatDelay: 250
     property real mouseSens: 0
@@ -2118,7 +2118,7 @@ Scope {
         if (clipHistory && barEnabled && settingsReady) clipProbe.running = true;
         else { clipWatchText.running = false; clipWatchImg.running = false; }
     }
-    onSettingsReadyChanged: { clipStart(); emojiEnsure(); }
+    onSettingsReadyChanged: { clipStart(); emojiEnsure(); syncPortalAppearance(); }
     onClipHistoryChanged: clipStart()
     Process {
         id: clipProbe
@@ -2432,7 +2432,7 @@ Scope {
         var r = searchApps(q), out = [];
         for (var i = 0; i < r.length && i < limit; i++)
             out.push({ title: r[i].name, sub: r[i].genericName || "Application", icon: iconSrc(r[i].icon),
-                       glyph: "", confirm: false, run: appRunner(r[i]) });
+                       glyph: "", entry: r[i], confirm: false, run: appRunner(r[i]) });
         return out;
     }
     function actionItems(q) {
@@ -3334,7 +3334,10 @@ Scope {
         wpApplyProc.running = true;
     }
     onWallpaperAppearanceChanged: wpApplyAppearance()
-    onDarkModeChanged: if (wallpaperAppearance === "auto") wpApplyAppearance()
+    function syncPortalAppearance() {
+        if (settingsReady) Quickshell.execDetached(["python3", Qt.resolvedUrl("scripts/portals.py").toString().replace(/^file:\/\//, ""), darkMode ? "dark" : "light"]);
+    }
+    onDarkModeChanged: { if (wallpaperAppearance === "auto") wpApplyAppearance(); syncPortalAppearance(); }
     Timer { interval: 60000; repeat: true; running: root.wpHasPair && root.wallpaperAppearance === "dynamic" && !root.gaming; onTriggered: root.wpApplyAppearance() }
     // at start: scan the folder, then pick up a pair for the wallpaper already in use
     Timer { interval: 1500; running: true; onTriggered: root.wpRefresh() }
@@ -3629,6 +3632,20 @@ Scope {
                 property string spHoverLabel: ""
                 property int spSel: 0
                 property var spExpanded: ({})
+                property var spAppEntry: null
+                property int spAppAction: 0
+                property point spAppPoint: Qt.point(0, 0)
+                readonly property bool spAppPinned: {
+                    if (!spAppEntry || !root.hub.dock) return false;
+                    var id = String(spAppEntry.id).replace(/\.desktop$/, "").toLowerCase();
+                    return root.hub.dock.pinned.some(function (v) { return String(v).replace(/\.desktop$/, "").toLowerCase() === id; });
+                }
+                function spAppMenu(entry, point) { spAppEntry = entry; spAppPoint = point; spAppAction = 0; }
+                function spPinApp() {
+                    if (spAppEntry && root.hub.dock)
+                        root.hub.dock.togglePin({key: String(spAppEntry.id).replace(/\.desktop$/, "").toLowerCase(), entry: spAppEntry});
+                    spAppEntry = null;
+                }
                 property bool clipMenu: false           // the round "..." menu of the Clipboard panel
                 property bool spCalm: false             // Spotlight was opened by the clipboard / emoji shortcut: plain fade, no springy pop
                 property bool spReqCalm: false
@@ -3642,6 +3659,7 @@ Scope {
                                         : (spQuery.trim() === "" ? [] : root.homeItems(spQuery))))
 
                 function spSetMode(m) {
+                    spAppEntry = null;
                     spMode = m; spQuery = ""; spHoverLabel = ""; spSel = 0; armed = ""; clipMenu = false;
                     spInput.text = ""; appsInput.text = ""; clipInput.text = ""; emojiInput.text = "";
                     if (m === "clip") root.clipRefresh();
@@ -3649,7 +3667,8 @@ Scope {
                     spFocusTimer.restart();
                 }
                 function spEscape() {
-                    if (clipMenu) clipMenu = false;
+                    if (spAppEntry) spAppEntry = null;
+                    else if (clipMenu) clipMenu = false;
                     else if (spQuery !== "") { spInput.text = ""; appsInput.text = ""; clipInput.text = ""; emojiInput.text = ""; spQuery = ""; }
                     else if (spMode !== "home") spSetMode("home");
                     else pop = "";
@@ -3675,6 +3694,21 @@ Scope {
                     } else spActivate(Math.min(spSel, spResults.length - 1));
                 }
                 function spKey(ev) {
+                    if (spAppEntry) {
+                        if (ev.key === Qt.Key_Escape || ev.key === Qt.Key_Menu) { spAppEntry = null; ev.accepted = true; return; }
+                        if (ev.key === Qt.Key_Up || ev.key === Qt.Key_Down) { spAppAction = 1 - spAppAction; ev.accepted = true; return; }
+                        if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) {
+                            if (spAppAction === 1) spPinApp();
+                            else { var entry = spAppEntry; spAppEntry = null; pop = ""; root.launchApp(entry); }
+                            ev.accepted = true; return;
+                        }
+                    }
+                    if (ev.key === Qt.Key_Menu || (ev.key === Qt.Key_F10 && (ev.modifiers & Qt.ShiftModifier))) {
+                        var selected = spResults[spSel];
+                        if (selected && selected.entry) spAppMenu(selected.entry, Qt.point(spot.x + 100, spot.y + spot.height - 20));
+                        ev.accepted = true; return;
+                    }
+
                     var k = ev.key, n = spResults.length;
                     if (k === Qt.Key_Escape) { spEscape(); ev.accepted = true; }
                     else if (spMode === "emoji" && (k === Qt.Key_Left || k === Qt.Key_Right || k === Qt.Key_Up || k === Qt.Key_Down)) {
@@ -3731,6 +3765,7 @@ Scope {
                 readonly property bool anyVisible: menuPop.visible || cc.visible || cal.visible || wifiPop.visible || btPop.visible || trayPop.visible || notifPop.visible || toastArea.visible || volPop.visible || kbPop.visible
                 onAnyVisibleChanged: root.popCount += (anyVisible ? 1 : -1)
                 onPopChanged: {
+                    if (pop !== "spot") spAppEntry = null;
                     if (pop !== "" && pop !== "spot") toneT.restart();
                     if (pop === "spot" && ui.toastScreen) root.measureTone(win.modelData.x + ui.width / 2 - 320, win.modelData.y + ui.height * 0.4 - 30, 640, 60);
                     armed = "";
@@ -4370,7 +4405,7 @@ Scope {
                                 onWheel: wheel => root.setVolume(root.volume + (wheel.angleDelta.y > 0 ? 0.03 : -0.03))
                             }
                         }
-                        // keyboard layout: click = next layout, right-click = pick from a list, scroll = cycle
+                        // Input Sources: click opens the menu; scroll cycles layouts.
                         Item {
                             id: kbBtn
                             visible: root.barWidgetEnabled("keyboard") && root.kbLayouts.length !== 1
@@ -4380,11 +4415,16 @@ Scope {
                                 width: parent.width - 2; height: parent.height - 6; radius: 6
                                 color: (ui.pop === "kb" || kbMouse.containsMouse) ? bpal.hover : "transparent"
                             }
-                            Text {
+                            Rectangle {
                                 anchors.centerIn: parent
-                                text: root.keyboardLayout
+                                width: 22; height: 17; radius: 3
                                 color: bpal.fg
-                                font.family: bpal.fam; font.pixelSize: 12; font.weight: Font.DemiBold
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: root.keyboardLayout === "US" ? "A" : (root.keyboardLayout === "RU" ? "РУ" : root.keyboardLayout)
+                                    color: bpal.dark ? "#151515" : "white"
+                                    font.family: bpal.fam; font.pixelSize: root.keyboardLayout === "US" ? 12 : 9; font.weight: Font.DemiBold
+                                }
                             }
                             MouseArea {
                                 id: kbMouse
@@ -4392,8 +4432,7 @@ Scope {
                                 hoverEnabled: true
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                                 onClicked: mouse => {
-                                    if (mouse.button === Qt.RightButton) ui.openPop("kb", kbBtn.mapToItem(ui, 0, 0).x + kbBtn.width / 2);
-                                    else root.cycleKeyboardLayout(1);
+                                    ui.openPop("kb", kbBtn.mapToItem(ui, 0, 0).x + kbBtn.width / 2);
                                 }
                                 onWheel: wheel => root.cycleKeyboardLayout(wheel.angleDelta.y > 0 ? -1 : 1)
                             }
@@ -4771,6 +4810,12 @@ Scope {
                                 }
                                 MouseArea { id: krMa; anchors.fill: parent; hoverEnabled: true; onClicked: { root.switchKeyboardLayout(kr.index); ui.pop = ""; } }
                             }
+                        }
+                        Rectangle { x: 6; width: parent.width - 12; height: 1; color: pal.fg2; opacity: 0.2 }
+                        Item {
+                            width: parent.width; height: 36
+                            Text { x: 12; anchors.verticalCenter: parent.verticalCenter; text: "Keyboard Settings…"; color: pal.fg; font.family: pal.fam; font.pixelSize: 13 }
+                            MouseArea { anchors.fill: parent; onClicked: { ui.pop = ""; root.hub.openSettings("keyboard"); } }
                         }
                     }
                 }
@@ -7509,6 +7554,51 @@ Scope {
                     onFailed: root.glassState = "failed"
                 }
 
+                Item {
+                    anchors.fill: parent; z: 30
+                    visible: ui.pop === "spot" && ui.spAppEntry !== null
+                    MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: ui.spAppEntry = null }
+                    Rectangle {
+                        id: spotAppMenu
+                        x: Math.max(8, Math.min(parent.width - width - 8, ui.spAppPoint.x))
+                        y: Math.max(8, Math.min(parent.height - height - 8, ui.spAppPoint.y))
+                        width: 228; height: 100; radius: 12
+                        color: root.effDark ? "#F0252730" : "#F0F7F7FA"
+                        border.width: 1; border.color: root.effDark ? "#35FFFFFF" : "#22000000"
+                        MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
+                        Column {
+                            x: 6; y: 6; width: parent.width - 12
+                            Text {
+                                x: 8; width: parent.width - 16; height: 24; elide: Text.ElideRight
+                                text: ui.spAppEntry ? ui.spAppEntry.name : ""
+                                color: pal.fg2; font.family: pal.fam; font.pixelSize: 11
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            Repeater {
+                                model: ["Open", ui.spAppPinned ? "Remove from Dock" : "Keep in Dock"]
+                                delegate: Rectangle {
+                                    id: appMenuRow
+                                    required property string modelData
+                                    required property int index
+                                    width: 216; height: 30; radius: 6
+                                    color: appMenuMouse.containsMouse || ui.spAppAction === index ? root.accent : "transparent"
+                                    Text { x: 8; anchors.verticalCenter: parent.verticalCenter; text: appMenuRow.modelData; color: appMenuMouse.containsMouse || ui.spAppAction === appMenuRow.index ? "white" : pal.fg; font.family: pal.fam; font.pixelSize: 13 }
+                                    MouseArea {
+                                        id: appMenuMouse; anchors.fill: parent; hoverEnabled: true
+                                        onEntered: ui.spAppAction = appMenuRow.index
+                                        acceptedButtons: Qt.AllButtons
+                                        onClicked: mouse => {
+                                            if (mouse.button !== Qt.LeftButton) return;
+                                            if (appMenuRow.index === 1) ui.spPinApp();
+                                            else { var entry = ui.spAppEntry; ui.spAppEntry = null; ui.pop = ""; if (entry) root.launchApp(entry); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // ═════════ Spotlight (Liquid Glass) ═════════
                 Item {
                     id: spot
@@ -7548,6 +7638,9 @@ Scope {
                         }
                     ]
 
+                    // Accept clicks on empty interior space, including right clicks.
+                    // Without this, the full-screen outside-click handler closes Spotlight.
+                    MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: ui.spAppEntry = null }
                     Timer { id: spHoverClear; interval: 350; onTriggered: ui.spHoverLabel = "" }
                     Timer {
                         id: spFocusTimer
@@ -7731,7 +7824,12 @@ Scope {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         onEntered: ui.spSel = rr.index
-                                        onClicked: ui.spActivate(rr.index)
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        onClicked: mouse => {
+                                            if (mouse.button === Qt.RightButton) {
+                                                if (rr.modelData.entry) ui.spAppMenu(rr.modelData.entry, mapToItem(spotRoot, mouse.x, mouse.y));
+                                            } else ui.spActivate(rr.index);
+                                        }
                                     }
                                 }
                             }
@@ -8353,7 +8451,11 @@ Scope {
                                                         id: cma
                                                         anchors.fill: parent
                                                         hoverEnabled: true
-                                                        onClicked: { ui.pop = ""; root.launchApp(cell.e); }
+                                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                                        onClicked: mouse => {
+                                                            if (mouse.button === Qt.RightButton) ui.spAppMenu(cell.e, mapToItem(spotRoot, mouse.x, mouse.y));
+                                                            else { ui.pop = ""; root.launchApp(cell.e); }
+                                                        }
                                                     }
                                                 }
                                             }

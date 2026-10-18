@@ -3137,7 +3137,7 @@ Scope {
                         SSlider { t: pal; leftLabel: "Long"; rightLabel: "Short"; from: 0; to: 1; value: root.bar ? 1 - (root.bar.kbRepeatDelay - 150) / 650 : 0.6; onMoved: v => { if (root.bar) root.bar.kbRepeatDelay = Math.round(150 + (1 - v) * 650); } }
                     }
                 }
-                SLabel { t: pal; text: "Layout: " + "us" + ". Changes apply right away." }
+                KeyboardSources { width: parent.width; theme: pal }
             }
         }
 
