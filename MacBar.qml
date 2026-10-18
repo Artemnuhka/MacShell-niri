@@ -3547,12 +3547,16 @@ Scope {
             id: win
             property var modelData: perScreen.modelData
             screen: perScreen.modelData
+            readonly property bool fullscreen: root.screenFullscreen[modelData.name] === true
+            onFullscreenChanged: if (fullscreen) ui.pop = ""
 
             anchors { left: true; right: true; top: true }
             implicitHeight: root.barHeight + root.popRoom
             color: "transparent"
 
             exclusionMode: ExclusionMode.Normal
+            // Keep the normal work area stable while fullscreen ignores it. Removing
+            // the zone here could make a maximized window look fullscreen on exit.
             exclusiveZone: root.barEnabled ? root.barHeight : 0
 
             WlrLayershell.namespace: "macbar"
@@ -4094,7 +4098,7 @@ Scope {
                     id: maskItem
                     x: 0; y: 0
                     width: ui.width
-                    height: (ui.pop !== "" && ui.pop !== "spot") ? ui.height : root.barHeight
+                    height: (ui.pop !== "" && ui.pop !== "spot") ? ui.height : (win.fullscreen ? 0 : root.barHeight)
                 }
 
                 // click-away layer (under the popovers and the bar)
@@ -4167,7 +4171,7 @@ Scope {
                 // ═════════ the bar itself ═════════
                 Rectangle {
                     id: barBg
-                    visible: root.barEnabled
+                    visible: root.barEnabled && !win.fullscreen
                     z: 20
                     x: 0; y: 0
                     width: ui.width

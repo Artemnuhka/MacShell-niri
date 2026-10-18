@@ -4307,7 +4307,9 @@ Scope {
             id: win
             required property var modelData
             screen: modelData
-            visible: root.effectiveMonitor === "" || modelData.name === root.effectiveMonitor
+            readonly property bool fullscreen: root.bar && root.bar.screenFullscreen[modelData.name] === true
+            visible: !fullscreen && (root.effectiveMonitor === "" || modelData.name === root.effectiveMonitor)
+            onFullscreenChanged: if (fullscreen) { ui.revealed = false; ui.menuItem = null; }
 
             anchors { left: true; right: true; bottom: true }
             implicitHeight: root.windowHeight
