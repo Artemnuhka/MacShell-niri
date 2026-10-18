@@ -44,6 +44,7 @@ Column {
                     root.roles = JSON.parse(text).roles;
                     if (root.saving) {
                         if (request.changes.terminal && root.bar) root.bar.terminal = "default";
+                        if (request.changes.files && root.bar) root.bar.filesCmd = 'xdg-open "$HOME"';
                         root.pending = ({});
                     }
                     root.message = root.saving ? "Default applications saved." : "Choose applications, then click Apply.";
