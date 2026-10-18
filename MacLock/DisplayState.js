@@ -52,3 +52,13 @@ function widgetPositions(widgets, screens, main, dims) {
     });
     return positions;
 }
+
+// Prefer MacShell's saved main output even if it loads after the screen list.
+// Keep a stable fallback while the preferred output is unplugged.
+function lockPrimary(screens, preferred, current, focused) {
+    var names = ordered(screens).map(function(s) { return s.name; });
+    if (names.indexOf(preferred) >= 0) return preferred;
+    if (names.indexOf(current) >= 0) return current;
+    if (names.indexOf(focused) >= 0) return focused;
+    return primary(screens, "", focused);
+}

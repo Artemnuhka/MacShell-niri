@@ -19,3 +19,14 @@ assert.equal(unplugged.b.screen,'eDP-1');assert.notEqual(unplugged.a.x+','+unplu
 const reconnected=d.widgetPositions(widgets,screens,'DP-1',dims);
 assert.equal(JSON.stringify(connected),JSON.stringify(reconnected));assert.equal(before,JSON.stringify(widgets));
 console.log('Display state: 3 screens, fractional scales, portrait, negative positions and reconnect passed.');
+
+const lock = vm.createContext({});
+vm.runInContext(fs.readFileSync(`${__dirname}/../MacLock/DisplayState.js`, 'utf8'), lock);
+const desktop = [{name:'DVI-D-1',x:0,y:0},{name:'HDMI-A-1',x:1280,y:0}];
+assert.equal(lock.lockPrimary(desktop,'HDMI-A-1','DVI-D-1','DVI-D-1'),'HDMI-A-1');
+assert.equal(lock.lockPrimary(desktop,'','DVI-D-1','HDMI-A-1'),'DVI-D-1');
+assert.equal(lock.lockPrimary([desktop[0]],'HDMI-A-1','HDMI-A-1','DVI-D-1'),'DVI-D-1');
+assert.equal(lock.lockPrimary(desktop,'HDMI-A-1','DVI-D-1','DVI-D-1'),'HDMI-A-1');
+assert.equal(lock.lockPrimary(desktop,'DVI-D-1','HDMI-A-1','HDMI-A-1'),'DVI-D-1');
+assert.equal(lock.lockPrimary([], 'HDMI-A-1','DVI-D-1',''), '');
+console.log('MacLock: saved primary wins over focus/enumeration, delayed settings, unplug/reconnect and primary changes passed.');

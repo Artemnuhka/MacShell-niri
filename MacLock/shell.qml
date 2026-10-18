@@ -24,6 +24,8 @@ ShellRoot {
     // Default launch keeps the original behavior and locks immediately. In daemon mode, wait for IPC.
     property bool lockRequested: !daemonMode
     function requestLock() {
+        displaySettings.reload();
+        pickPrimary();
         if (!preview) lockRequested = true;
     }
     IpcHandler {
@@ -36,20 +38,27 @@ ShellRoot {
         function lock(): void { root.requestLock(); }
     }
 
-    // the monitor that was focused when the lock started gets the full layout
+    // Password, user panel and notifications follow MacShell's main display.
     property string primary: ""
+    property string preferredPrimary: ""
+    FileView {
+        id: displaySettings
+        path: (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/macshell/displays.json"
+        printErrors: false
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try { root.preferredPrimary = String(JSON.parse(text()).primary || ""); }
+            catch (error) { root.preferredPrimary = ""; }
+            root.pickPrimary();
+        }
+        onLoadFailed: { root.preferredPrimary = ""; root.pickPrimary(); }
+    }
     function pickPrimary() {
-        var names = Quickshell.screens.map(function(s) { return s.name; });
-        if (names.indexOf(primary) >= 0) return;
         var focused = niri.focusedMonitor ? niri.focusedMonitor.name : "";
-        primary = names.indexOf(focused) >= 0 ? focused : Displays.primary(Quickshell.screens, "", focused);
+        primary = Displays.lockPrimary(Quickshell.screens, preferredPrimary, primary, focused);
     }
     Component.onCompleted: pickPrimary()
-    // Hyprland's state arrives a moment after startup; only fall back to the first screen if it never does
-    Timer {
-        interval: 400; running: true
-        onTriggered: if (root.primary === "" && Quickshell.screens.length > 0) root.primary = Quickshell.screens[0].name
-    }
     Connections { target: Quickshell; function onScreensChanged() { root.pickPrimary(); } }
     Connections { target: niri; function onChanged() { root.pickPrimary(); } }
 
